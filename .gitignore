@@ -1,0 +1,23 @@
+# Build artifacts
+bin/
+/brandfetch
+*.exe
+coverage.out
+
+# Tools
+.tools/
+
+# IDE/Editor
+.cursor/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Development docs (not for public)
+docs/
+.specstory/
+
+# OS files
+.DS_Store
+Thumbs.db

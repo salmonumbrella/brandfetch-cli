@@ -1,0 +1,462 @@
+package output
+
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestPrintJSON(t *testing.T) {
+	var buf bytes.Buffer
+	data := map[string]string{"name": "GitHub", "domain": "github.com"}
+
+	err := PrintJSON(&buf, data)
+	if err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
+
+	// Should be valid JSON
+	var result map[string]string
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("Output is not valid JSON: %v", err)
+	}
+
+	if result["name"] != "GitHub" {
+		t.Errorf("name = %v, want GitHub", result["name"])
+	}
+}
+
+func TestPrintText(t *testing.T) {
+	var buf bytes.Buffer
+	PrintText(&buf, "Hello %s", "World")
+
+	if got := buf.String(); got != "Hello World\n" {
+		t.Errorf("PrintText() = %q, want %q", got, "Hello World\n")
+	}
+}
+
+func TestFormat_String(t *testing.T) {
+	tests := []struct {
+		f    Format
+		want string
+	}{
+		{FormatText, "text"},
+		{FormatJSON, "json"},
+	}
+
+	for _, tt := range tests {
+		if got := tt.f.String(); got != tt.want {
+			t.Errorf("Format.String() = %v, want %v", got, tt.want)
+		}
+	}
+}
+
+func TestParseFormat(t *testing.T) {
+	tests := []struct {
+		input string
+		want  Format
+		err   bool
+	}{
+		{"text", FormatText, false},
+		{"json", FormatJSON, false},
+		{"TEXT", FormatText, false},
+		{"JSON", FormatJSON, false},
+		{"invalid", FormatText, true},
+	}
+
+	for _, tt := range tests {
+		got, err := ParseFormat(tt.input)
+		if (err != nil) != tt.err {
+			t.Errorf("ParseFormat(%q) error = %v, wantErr %v", tt.input, err, tt.err)
+			continue
+		}
+		if !tt.err && got != tt.want {
+			t.Errorf("ParseFormat(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestFormatLogo_Text(t *testing.T) {
+	logo := &LogoResult{
+		URL:    "https://example.com/logo.svg",
+		Format: "svg",
+		Theme:  "light",
+	}
+
+	result := FormatLogo(logo, FormatText)
+
+	if !strings.Contains(result, "https://example.com/logo.svg") {
+		t.Errorf("FormatLogo() text missing URL")
+	}
+}
+
+func TestFormatLogo_JSON(t *testing.T) {
+	logo := &LogoResult{
+		URL:    "https://example.com/logo.svg",
+		Format: "svg",
+		Theme:  "light",
+	}
+
+	result := FormatLogo(logo, FormatJSON)
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("FormatLogo() JSON invalid: %v", err)
+	}
+
+	if parsed["url"] != "https://example.com/logo.svg" {
+		t.Errorf("FormatLogo() JSON url = %v, want %v", parsed["url"], "https://example.com/logo.svg")
+	}
+}
+
+func TestFormatBrand_Text(t *testing.T) {
+	brand := &BrandResult{
+		Name:        "GitHub",
+		Domain:      "github.com",
+		Description: "Where the world builds software",
+		Logos: []LogoInfo{
+			{Type: "icon", Theme: "dark", URL: "https://example.com/icon.svg", Format: "svg"},
+			{Type: "logo", Theme: "light", URL: "https://example.com/logo.png", Format: "png"},
+		},
+		Colors: []ColorInfo{
+			{Hex: "#000000", Type: "dark", Brightness: 0},
+			{Hex: "#ffffff", Type: "light", Brightness: 100},
+		},
+		Fonts: []FontInfo{
+			{Name: "Inter", Type: "body"},
+			{Name: "Helvetica", Type: "heading"},
+		},
+		Links: []LinkInfo{
+			{Name: "Website", URL: "https://github.com"},
+		},
+	}
+
+	result := FormatBrand(brand, FormatText)
+
+	// Check essential parts are present
+	if !strings.Contains(result, "GitHub") {
+		t.Errorf("FormatBrand() text missing name")
+	}
+	if !strings.Contains(result, "github.com") {
+		t.Errorf("FormatBrand() text missing domain")
+	}
+	if !strings.Contains(result, "Where the world builds software") {
+		t.Errorf("FormatBrand() text missing description")
+	}
+	if !strings.Contains(result, "Logos: 2 available") {
+		t.Errorf("FormatBrand() text missing logos count")
+	}
+	if !strings.Contains(result, "icon (dark)") {
+		t.Errorf("FormatBrand() text missing logo info")
+	}
+	if !strings.Contains(result, "#000000 (dark)") {
+		t.Errorf("FormatBrand() text missing color info")
+	}
+	if !strings.Contains(result, "Inter (body)") {
+		t.Errorf("FormatBrand() text missing font info")
+	}
+}
+
+func TestFormatBrand_Text_Empty(t *testing.T) {
+	brand := &BrandResult{
+		Name:   "MinimalBrand",
+		Domain: "minimal.com",
+	}
+
+	result := FormatBrand(brand, FormatText)
+
+	if !strings.Contains(result, "MinimalBrand") {
+		t.Errorf("FormatBrand() text missing name")
+	}
+	if !strings.Contains(result, "minimal.com") {
+		t.Errorf("FormatBrand() text missing domain")
+	}
+	// Should not contain sections for empty slices
+	if strings.Contains(result, "Logos:") {
+		t.Errorf("FormatBrand() text should not show logos section when empty")
+	}
+	if strings.Contains(result, "Colors:") {
+		t.Errorf("FormatBrand() text should not show colors section when empty")
+	}
+	if strings.Contains(result, "Fonts:") {
+		t.Errorf("FormatBrand() text should not show fonts section when empty")
+	}
+}
+
+func TestFormatBrand_JSON(t *testing.T) {
+	brand := &BrandResult{
+		Name:        "GitHub",
+		Domain:      "github.com",
+		Description: "Where the world builds software",
+		Logos: []LogoInfo{
+			{Type: "icon", Theme: "dark", URL: "https://example.com/icon.svg", Format: "svg"},
+		},
+		Colors: []ColorInfo{
+			{Hex: "#000000", Type: "dark", Brightness: 0},
+		},
+		Fonts: []FontInfo{
+			{Name: "Inter", Type: "body"},
+		},
+	}
+
+	result := FormatBrand(brand, FormatJSON)
+
+	var parsed BrandResult
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("FormatBrand() JSON invalid: %v", err)
+	}
+
+	if parsed.Name != "GitHub" {
+		t.Errorf("FormatBrand() JSON name = %v, want GitHub", parsed.Name)
+	}
+	if parsed.Domain != "github.com" {
+		t.Errorf("FormatBrand() JSON domain = %v, want github.com", parsed.Domain)
+	}
+	if len(parsed.Logos) != 1 {
+		t.Errorf("FormatBrand() JSON logos count = %v, want 1", len(parsed.Logos))
+	}
+	if len(parsed.Colors) != 1 {
+		t.Errorf("FormatBrand() JSON colors count = %v, want 1", len(parsed.Colors))
+	}
+	if len(parsed.Fonts) != 1 {
+		t.Errorf("FormatBrand() JSON fonts count = %v, want 1", len(parsed.Fonts))
+	}
+}
+
+func TestFormatBrand_JSON_SpecialCharacters(t *testing.T) {
+	brand := &BrandResult{
+		Name:        "Test & Co. \"Quotes\" <Tags>",
+		Domain:      "test.com",
+		Description: "Line 1\nLine 2\tTabbed",
+	}
+
+	result := FormatBrand(brand, FormatJSON)
+
+	var parsed BrandResult
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("FormatBrand() JSON with special chars invalid: %v", err)
+	}
+
+	if parsed.Name != "Test & Co. \"Quotes\" <Tags>" {
+		t.Errorf("FormatBrand() JSON name with special chars = %v", parsed.Name)
+	}
+}
+
+func TestFormatSearch_Text(t *testing.T) {
+	results := []SearchResult{
+		{Name: "GitHub", Domain: "github.com", Icon: "https://example.com/icon.png"},
+		{Name: "GitLab", Domain: "gitlab.com", Icon: "https://example.com/icon2.png"},
+		{Name: "Bitbucket", Domain: "bitbucket.org"},
+	}
+
+	result := FormatSearch(results, FormatText)
+
+	if !strings.Contains(result, "GitHub") {
+		t.Errorf("FormatSearch() text missing first result name")
+	}
+	if !strings.Contains(result, "github.com") {
+		t.Errorf("FormatSearch() text missing first result domain")
+	}
+	if !strings.Contains(result, "GitLab") {
+		t.Errorf("FormatSearch() text missing second result")
+	}
+	if !strings.Contains(result, "Bitbucket") {
+		t.Errorf("FormatSearch() text missing third result")
+	}
+
+	// Check that results are formatted on separate lines
+	lines := strings.Split(strings.TrimSpace(result), "\n")
+	if len(lines) != 3 {
+		t.Errorf("FormatSearch() text line count = %v, want 3", len(lines))
+	}
+}
+
+func TestFormatSearch_Text_Empty(t *testing.T) {
+	results := []SearchResult{}
+
+	result := FormatSearch(results, FormatText)
+
+	if result != "" {
+		t.Errorf("FormatSearch() text for empty results = %q, want empty string", result)
+	}
+}
+
+func TestFormatSearch_JSON(t *testing.T) {
+	results := []SearchResult{
+		{Name: "GitHub", Domain: "github.com", Icon: "https://example.com/icon.png"},
+		{Name: "GitLab", Domain: "gitlab.com"},
+	}
+
+	result := FormatSearch(results, FormatJSON)
+
+	var parsed []SearchResult
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("FormatSearch() JSON invalid: %v", err)
+	}
+
+	if len(parsed) != 2 {
+		t.Errorf("FormatSearch() JSON count = %v, want 2", len(parsed))
+	}
+	if parsed[0].Name != "GitHub" {
+		t.Errorf("FormatSearch() JSON first name = %v, want GitHub", parsed[0].Name)
+	}
+	if parsed[1].Domain != "gitlab.com" {
+		t.Errorf("FormatSearch() JSON second domain = %v, want gitlab.com", parsed[1].Domain)
+	}
+}
+
+func TestFormatSearch_JSON_Empty(t *testing.T) {
+	results := []SearchResult{}
+
+	result := FormatSearch(results, FormatJSON)
+
+	var parsed []SearchResult
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("FormatSearch() JSON for empty results invalid: %v", err)
+	}
+
+	if len(parsed) != 0 {
+		t.Errorf("FormatSearch() JSON empty results count = %v, want 0", len(parsed))
+	}
+}
+
+func TestFormatColors_Text(t *testing.T) {
+	colors := []ColorInfo{
+		{Hex: "#ff0000", Type: "primary", Brightness: 50},
+		{Hex: "#00ff00", Type: "secondary", Brightness: 75},
+		{Hex: "#0000ff", Type: "accent", Brightness: 40},
+	}
+
+	result := FormatColors(colors, FormatText)
+
+	if !strings.Contains(result, "#ff0000 (primary)") {
+		t.Errorf("FormatColors() text missing first color")
+	}
+	if !strings.Contains(result, "#00ff00 (secondary)") {
+		t.Errorf("FormatColors() text missing second color")
+	}
+	if !strings.Contains(result, "#0000ff (accent)") {
+		t.Errorf("FormatColors() text missing third color")
+	}
+
+	lines := strings.Split(strings.TrimSpace(result), "\n")
+	if len(lines) != 3 {
+		t.Errorf("FormatColors() text line count = %v, want 3", len(lines))
+	}
+}
+
+func TestFormatColors_Text_Empty(t *testing.T) {
+	colors := []ColorInfo{}
+
+	result := FormatColors(colors, FormatText)
+
+	if result != "" {
+		t.Errorf("FormatColors() text for empty colors = %q, want empty string", result)
+	}
+}
+
+func TestFormatColors_JSON(t *testing.T) {
+	colors := []ColorInfo{
+		{Hex: "#ff0000", Type: "primary", Brightness: 50},
+		{Hex: "#00ff00", Type: "secondary", Brightness: 75},
+	}
+
+	result := FormatColors(colors, FormatJSON)
+
+	var parsed []ColorInfo
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("FormatColors() JSON invalid: %v", err)
+	}
+
+	if len(parsed) != 2 {
+		t.Errorf("FormatColors() JSON count = %v, want 2", len(parsed))
+	}
+	if parsed[0].Hex != "#ff0000" {
+		t.Errorf("FormatColors() JSON first hex = %v, want #ff0000", parsed[0].Hex)
+	}
+	if parsed[0].Brightness != 50 {
+		t.Errorf("FormatColors() JSON first brightness = %v, want 50", parsed[0].Brightness)
+	}
+	if parsed[1].Type != "secondary" {
+		t.Errorf("FormatColors() JSON second type = %v, want secondary", parsed[1].Type)
+	}
+}
+
+func TestFormatFonts_Text(t *testing.T) {
+	fonts := []FontInfo{
+		{Name: "Inter", Type: "body"},
+		{Name: "Helvetica Neue", Type: "heading"},
+		{Name: "Monaco", Type: "monospace"},
+	}
+
+	result := FormatFonts(fonts, FormatText)
+
+	if !strings.Contains(result, "Inter (body)") {
+		t.Errorf("FormatFonts() text missing first font")
+	}
+	if !strings.Contains(result, "Helvetica Neue (heading)") {
+		t.Errorf("FormatFonts() text missing second font")
+	}
+	if !strings.Contains(result, "Monaco (monospace)") {
+		t.Errorf("FormatFonts() text missing third font")
+	}
+
+	lines := strings.Split(strings.TrimSpace(result), "\n")
+	if len(lines) != 3 {
+		t.Errorf("FormatFonts() text line count = %v, want 3", len(lines))
+	}
+}
+
+func TestFormatFonts_Text_Empty(t *testing.T) {
+	fonts := []FontInfo{}
+
+	result := FormatFonts(fonts, FormatText)
+
+	if result != "" {
+		t.Errorf("FormatFonts() text for empty fonts = %q, want empty string", result)
+	}
+}
+
+func TestFormatFonts_JSON(t *testing.T) {
+	fonts := []FontInfo{
+		{Name: "Inter", Type: "body"},
+		{Name: "Helvetica", Type: "heading"},
+	}
+
+	result := FormatFonts(fonts, FormatJSON)
+
+	var parsed []FontInfo
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("FormatFonts() JSON invalid: %v", err)
+	}
+
+	if len(parsed) != 2 {
+		t.Errorf("FormatFonts() JSON count = %v, want 2", len(parsed))
+	}
+	if parsed[0].Name != "Inter" {
+		t.Errorf("FormatFonts() JSON first name = %v, want Inter", parsed[0].Name)
+	}
+	if parsed[0].Type != "body" {
+		t.Errorf("FormatFonts() JSON first type = %v, want body", parsed[0].Type)
+	}
+	if parsed[1].Name != "Helvetica" {
+		t.Errorf("FormatFonts() JSON second name = %v, want Helvetica", parsed[1].Name)
+	}
+}
+
+func TestFormatFonts_Text_SpecialCharacters(t *testing.T) {
+	fonts := []FontInfo{
+		{Name: "Font \"With\" Quotes", Type: "special"},
+		{Name: "Font & Symbols <test>", Type: "test"},
+	}
+
+	result := FormatFonts(fonts, FormatText)
+
+	if !strings.Contains(result, "Font \"With\" Quotes (special)") {
+		t.Errorf("FormatFonts() text not handling special characters in name")
+	}
+	if !strings.Contains(result, "Font & Symbols <test> (test)") {
+		t.Errorf("FormatFonts() text not handling special characters")
+	}
+}
