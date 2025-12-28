@@ -46,21 +46,6 @@ changelog:
       - "Merge pull request"
       - "Merge branch"
 
-brews:
-  - name: brandfetch
-    repository:
-      owner: salmonumbrella
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/salmonumbrella/brandfetch-cli"
-    description: "CLI tool for fetching brand assets from Brandfetch API"
-    license: "MIT"
-    install: |
-      bin.install "brandfetch"
-    test: |
-      system "#{bin}/brandfetch", "version"
-
 release:
   github:
     owner: salmonumbrella
