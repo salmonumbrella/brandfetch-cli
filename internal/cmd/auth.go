@@ -36,11 +36,77 @@ Credentials are stored in the OS keychain by default.
 Get your API keys at https://brandfetch.com/developers`,
 	}
 
+	cmd.AddCommand(newAuthLoginCmd())
 	cmd.AddCommand(newAuthSetCmd())
 	cmd.AddCommand(newAuthStatusCmd())
 	cmd.AddCommand(newAuthClearCmd())
 
 	return cmd
+}
+
+func newAuthLoginCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "login",
+		Short: "Authenticate via browser",
+		Long: `Opens a browser window to configure API credentials interactively.
+
+This provides a guided setup experience with:
+  - Links to find your API credentials
+  - Secure credential storage in keychain
+
+Brandfetch has two API endpoints with separate keys:
+  - Logo API: High quota, used for logo and search queries
+  - Brand API: Limited quota, used for full brand data (colors, fonts, etc.)
+
+You can configure one or both keys depending on your needs.
+
+Examples:
+  brandfetch auth login`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := secrets.NewStore()
+			if err != nil {
+				return fmt.Errorf("failed to open keychain: %w", err)
+			}
+			return runAuthLoginCmd(cmd, store)
+		},
+	}
+}
+
+func runAuthLoginCmd(cmd *cobra.Command, store SecretsStore) error {
+	server, err := authserver.NewServer()
+	if err != nil {
+		return fmt.Errorf("failed to start auth server: %w", err)
+	}
+	defer func() { _ = server.Shutdown() }()
+
+	server.Start()
+	url := server.URL()
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Opening browser to configure credentials...\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "If browser doesn't open, visit: %s\n\n", url)
+
+	openBrowser(url)
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Waiting for credentials...\n")
+	creds, err := server.WaitForCredentials(5 * time.Minute)
+	if err != nil {
+		return err
+	}
+
+	// Store credentials (at least one must be provided)
+	if creds.ClientID != "" {
+		if err := store.Set("client_id", creds.ClientID); err != nil {
+			return fmt.Errorf("failed to store client_id: %w", err)
+		}
+	}
+	if creds.APIKey != "" {
+		if err := store.Set("api_key", creds.APIKey); err != nil {
+			return fmt.Errorf("failed to store api_key: %w", err)
+		}
+	}
+
+	fmt.Fprintln(cmd.OutOrStdout(), "Credentials saved successfully.")
+	return nil
 }
 
 func newAuthSetCmd() *cobra.Command {

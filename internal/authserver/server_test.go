@@ -135,22 +135,28 @@ func TestAuthServer_MethodNotAllowed(t *testing.T) {
 
 func TestAuthServer_PartialCredentials(t *testing.T) {
 	tests := []struct {
-		name       string
-		clientID   string
-		apiKey     string
-		wantStatus int
+		name         string
+		clientID     string
+		apiKey       string
+		wantStatus   int
+		wantClientID string
+		wantAPIKey   string
 	}{
 		{
-			name:       "only client_id",
-			clientID:   "test_client",
-			apiKey:     "",
-			wantStatus: http.StatusBadRequest,
+			name:         "only client_id",
+			clientID:     "test_client",
+			apiKey:       "",
+			wantStatus:   http.StatusOK,
+			wantClientID: "test_client",
+			wantAPIKey:   "",
 		},
 		{
-			name:       "only api_key",
-			clientID:   "",
-			apiKey:     "test_api",
-			wantStatus: http.StatusBadRequest,
+			name:         "only api_key",
+			clientID:     "",
+			apiKey:       "test_api",
+			wantStatus:   http.StatusOK,
+			wantClientID: "",
+			wantAPIKey:   "test_api",
 		},
 	}
 
@@ -177,12 +183,17 @@ func TestAuthServer_PartialCredentials(t *testing.T) {
 				t.Errorf("POST /auth status = %d, want %d", w.Code, tt.wantStatus)
 			}
 
-			// Verify no credentials were sent to channel
+			// Verify credentials were sent to channel with partial values
 			select {
-			case <-resultChan:
-				t.Error("credentials should not be sent for partial input")
+			case creds := <-resultChan:
+				if creds.ClientID != tt.wantClientID {
+					t.Errorf("ClientID = %v, want %v", creds.ClientID, tt.wantClientID)
+				}
+				if creds.APIKey != tt.wantAPIKey {
+					t.Errorf("APIKey = %v, want %v", creds.APIKey, tt.wantAPIKey)
+				}
 			default:
-				// Expected: channel should be empty
+				t.Error("credentials should be sent for partial input")
 			}
 		})
 	}
