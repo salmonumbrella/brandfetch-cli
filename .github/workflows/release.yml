@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # macOS runner required for darwin builds with CGO (keychain access)
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4

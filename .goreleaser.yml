@@ -7,14 +7,29 @@ before:
     - go mod tidy
 
 builds:
-  - id: brandfetch
+  - id: brandfetch-darwin
+    main: ./cmd/brandfetch
+    binary: brandfetch
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Version={{.Version}}
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Commit={{.ShortCommit}}
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Date={{.Date}}
+
+  - id: brandfetch-other
     main: ./cmd/brandfetch
     binary: brandfetch
     env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
       - windows
     goarch:
       - amd64
@@ -27,11 +42,10 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
+    formats:
+      - tar.gz
+      - zip:windows
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
 
 checksum:
   name_template: "checksums.txt"
@@ -52,3 +66,18 @@ release:
     name: brandfetch-cli
   draft: false
   prerelease: auto
+
+brews:
+  - name: brandfetch-cli
+    repository:
+      owner: salmonumbrella
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/salmonumbrella/brandfetch-cli"
+    description: "CLI for Brandfetch API"
+    license: "MIT"
+    install: |
+      bin.install "brandfetch"
+    test: |
+      system "#{bin}/brandfetch", "--help"
