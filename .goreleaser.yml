@@ -44,7 +44,10 @@ archives:
   - id: default
     formats:
       - tar.gz
-      - zip:windows
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
