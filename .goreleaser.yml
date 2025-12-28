@@ -69,6 +69,7 @@ release:
 
 brews:
   - name: brandfetch-cli
+    skip_upload: true
     repository:
       owner: salmonumbrella
       name: homebrew-tap
