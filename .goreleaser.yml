@@ -70,18 +70,3 @@ release:
   draft: false
   prerelease: auto
 
-brews:
-  - name: brandfetch-cli
-    skip_upload: true
-    repository:
-      owner: salmonumbrella
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/salmonumbrella/brandfetch-cli"
-    description: "CLI for Brandfetch API"
-    license: "MIT"
-    install: |
-      bin.install "brandfetch"
-    test: |
-      system "#{bin}/brandfetch", "--help"
