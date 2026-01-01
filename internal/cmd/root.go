@@ -40,6 +40,7 @@ func Execute(args []string) error {
 	rootCmd.AddCommand(NewVersionCmd())
 	rootCmd.AddCommand(NewLogoCmd())
 	rootCmd.AddCommand(NewBrandCmd())
+	rootCmd.AddCommand(NewQuickCmd())
 	rootCmd.AddCommand(NewSearchCmd())
 	rootCmd.AddCommand(NewColorsCmd())
 	rootCmd.AddCommand(NewFontsCmd())

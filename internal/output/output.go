@@ -183,3 +183,60 @@ func FormatFonts(fonts []FontInfo, format Format) string {
 	}
 	return sb.String()
 }
+
+// QuickResult represents the essentials output: logos, favicon, colors, fonts.
+type QuickResult struct {
+	Name      string      `json:"name"`
+	Domain    string      `json:"domain"`
+	LogoLight string      `json:"logo_light,omitempty"`
+	LogoDark  string      `json:"logo_dark,omitempty"`
+	Favicon   string      `json:"favicon,omitempty"`
+	Colors    []ColorInfo `json:"colors"`
+	Fonts     []FontInfo  `json:"fonts"`
+}
+
+// FormatQuick formats quick result (essentials).
+func FormatQuick(result *QuickResult, format Format) string {
+	if format == FormatJSON {
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return string(data)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%s (%s)\n", result.Name, result.Domain))
+
+	// Logos
+	sb.WriteString("\nLogos (SVG):\n")
+	if result.LogoLight != "" {
+		sb.WriteString(fmt.Sprintf("  light: %s\n", result.LogoLight))
+	}
+	if result.LogoDark != "" {
+		sb.WriteString(fmt.Sprintf("  dark:  %s\n", result.LogoDark))
+	}
+	if result.LogoLight == "" && result.LogoDark == "" {
+		sb.WriteString("  (no SVG available)\n")
+	}
+
+	// Favicon
+	if result.Favicon != "" {
+		sb.WriteString(fmt.Sprintf("\nFavicon:\n  %s\n", result.Favicon))
+	}
+
+	// Colors
+	if len(result.Colors) > 0 {
+		sb.WriteString("\nColors:\n")
+		for _, c := range result.Colors {
+			sb.WriteString(fmt.Sprintf("  %s (%s)\n", c.Hex, c.Type))
+		}
+	}
+
+	// Fonts
+	if len(result.Fonts) > 0 {
+		sb.WriteString("\nFonts:\n")
+		for _, f := range result.Fonts {
+			sb.WriteString(fmt.Sprintf("  %s (%s)\n", f.Name, f.Type))
+		}
+	}
+
+	return sb.String()
+}
