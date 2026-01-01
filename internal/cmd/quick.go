@@ -18,6 +18,7 @@ import (
 
 var downloadDir string
 var cssOutput bool
+var tailwindOutput bool
 
 // HTTPClient interface for downloading files (allows mocking in tests).
 type HTTPClient interface {
@@ -38,7 +39,8 @@ Examples:
   brandfetch quick stripe.com
   brandfetch quick shopline.com --output json
   brandfetch quick stripe.com --download ./brand-assets/
-  brandfetch quick stripe.com --css`,
+  brandfetch quick stripe.com --css
+  brandfetch quick stripe.com --tailwind`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := createClient()
@@ -51,6 +53,7 @@ Examples:
 
 	cmd.Flags().StringVarP(&downloadDir, "download", "d", "", "Download assets to specified directory")
 	cmd.Flags().BoolVar(&cssOutput, "css", false, "Output colors and fonts as CSS custom properties")
+	cmd.Flags().BoolVar(&tailwindOutput, "tailwind", false, "Output colors and fonts as Tailwind CSS config")
 
 	return cmd
 }
@@ -69,6 +72,7 @@ func newQuickCmdWithClients(client APIClient, httpClient HTTPClient) *cobra.Comm
 	}
 	cmd.Flags().StringVarP(&downloadDir, "download", "d", "", "Download assets to specified directory")
 	cmd.Flags().BoolVar(&cssOutput, "css", false, "Output colors and fonts as CSS custom properties")
+	cmd.Flags().BoolVar(&tailwindOutput, "tailwind", false, "Output colors and fonts as Tailwind CSS config")
 	return cmd
 }
 
@@ -83,6 +87,12 @@ func runQuickCmd(cmd *cobra.Command, args []string, client APIClient, httpClient
 	if cssOutput && outputFormat == "json" {
 		return fmt.Errorf("--css and --output json are mutually exclusive")
 	}
+	if tailwindOutput && outputFormat == "json" {
+		return fmt.Errorf("--tailwind and --output json are mutually exclusive")
+	}
+	if tailwindOutput && cssOutput {
+		return fmt.Errorf("--tailwind and --css are mutually exclusive")
+	}
 
 	brand, err := client.GetBrand(ctx, domain)
 	if err != nil {
@@ -94,6 +104,8 @@ func runQuickCmd(cmd *cobra.Command, args []string, client APIClient, httpClient
 	// Output based on format
 	if cssOutput {
 		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickCSS(result))
+	} else if tailwindOutput {
+		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickTailwind(result))
 	} else {
 		format, _ := output.ParseFormat(outputFormat)
 		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuick(result, format))

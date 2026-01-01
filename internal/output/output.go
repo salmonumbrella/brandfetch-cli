@@ -303,6 +303,109 @@ func buildColorVariables(colors []ColorInfo) []cssVar {
 	return vars
 }
 
+// FormatQuickTailwind formats quick result as Tailwind CSS config JavaScript.
+func FormatQuickTailwind(result *QuickResult) string {
+	var sb strings.Builder
+
+	// Header comment
+	sb.WriteString(fmt.Sprintf("// Tailwind CSS config for %s\n", result.Name))
+	sb.WriteString("// Add to your tailwind.config.js theme.extend\n")
+	sb.WriteString("module.exports = {\n")
+
+	// Colors
+	if len(result.Colors) > 0 {
+		sb.WriteString("  colors: {\n")
+		colorEntries := buildTailwindColors(result.Colors)
+		for _, entry := range colorEntries {
+			sb.WriteString(entry)
+		}
+		sb.WriteString("  },\n")
+	}
+
+	// Fonts
+	if len(result.Fonts) > 0 {
+		sb.WriteString("  fontFamily: {\n")
+		fontEntries := buildTailwindFonts(result.Fonts)
+		for _, entry := range fontEntries {
+			sb.WriteString(entry)
+		}
+		sb.WriteString("  },\n")
+	}
+
+	sb.WriteString("}")
+	return sb.String()
+}
+
+// buildTailwindColors generates Tailwind color entries, handling duplicates with object nesting.
+func buildTailwindColors(colors []ColorInfo) []string {
+	// Group colors by type to handle duplicates properly
+	typeColors := make(map[string][]string)
+	typeOrder := []string{} // Preserve order of first occurrence
+
+	for _, c := range colors {
+		if _, exists := typeColors[c.Type]; !exists {
+			typeOrder = append(typeOrder, c.Type)
+		}
+		typeColors[c.Type] = append(typeColors[c.Type], c.Hex)
+	}
+
+	var entries []string
+	for _, colorType := range typeOrder {
+		hexValues := typeColors[colorType]
+		if len(hexValues) == 1 {
+			// Single color: simple key-value
+			entries = append(entries, fmt.Sprintf("    %s: '%s',\n", colorType, hexValues[0]))
+		} else {
+			// Multiple colors: nested object
+			var nested strings.Builder
+			nested.WriteString(fmt.Sprintf("    %s: {\n", colorType))
+			for i, hex := range hexValues {
+				nested.WriteString(fmt.Sprintf("      %d: '%s',\n", i+1, hex))
+			}
+			nested.WriteString("    },\n")
+			entries = append(entries, nested.String())
+		}
+	}
+
+	return entries
+}
+
+// buildTailwindFonts generates Tailwind fontFamily entries, handling duplicates.
+func buildTailwindFonts(fonts []FontInfo) []string {
+	// Count occurrences of each type
+	typeCounts := make(map[string]int)
+	for _, f := range fonts {
+		typeCounts[f.Type]++
+	}
+
+	// Track which types we've seen (for numbering duplicates)
+	typeIndex := make(map[string]int)
+
+	// Track unique fonts for deduplication (same name + type = skip)
+	seen := make(map[string]bool)
+
+	var entries []string
+	for _, f := range fonts {
+		key := f.Name + "|" + f.Type
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		if typeCounts[f.Type] > 1 {
+			// Duplicate types - but for fonts we typically just list them
+			// The spec says to use object nesting for colors, but for fonts
+			// we'll follow the same pattern as CSS and number them
+			typeIndex[f.Type]++
+			entries = append(entries, fmt.Sprintf("    %s%d: ['\"%s\"', 'sans-serif'],\n", f.Type, typeIndex[f.Type], f.Name))
+		} else {
+			entries = append(entries, fmt.Sprintf("    %s: ['\"%s\"', 'sans-serif'],\n", f.Type, f.Name))
+		}
+	}
+
+	return entries
+}
+
 // buildFontVariables generates CSS variable names for fonts, handling duplicates.
 func buildFontVariables(fonts []FontInfo) []cssVar {
 	// Count occurrences of each type

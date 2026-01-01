@@ -858,3 +858,238 @@ func TestQuickCmd_CSS_EmptyColorsAndFonts(t *testing.T) {
 		t.Errorf("output should not contain Fonts comment when no fonts")
 	}
 }
+
+func TestQuickCmd_Tailwind(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Stripe",
+				Domain: "stripe.com",
+				Colors: []api.Color{
+					{Hex: "#635BFF", Type: "accent"},
+					{Hex: "#0A2540", Type: "dark"},
+					{Hex: "#FFFFFF", Type: "light"},
+				},
+				Fonts: []api.Font{
+					{Name: "Sohne Var", Type: "title"},
+					{Name: "Sohne Var", Type: "body"},
+				},
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	tailwindOutput = true
+	defer func() { tailwindOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"stripe.com", "--tailwind"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Check header comments
+	if !containsStr(output, "// Tailwind CSS config for Stripe") {
+		t.Errorf("output should contain brand name in comment")
+	}
+	if !containsStr(output, "// Add to your tailwind.config.js theme.extend") {
+		t.Errorf("output should contain usage hint comment")
+	}
+
+	// Check structure
+	if !containsStr(output, "module.exports = {") {
+		t.Errorf("output should contain module.exports = {")
+	}
+
+	// Check colors section
+	if !containsStr(output, "colors: {") {
+		t.Errorf("output should contain colors: {")
+	}
+	if !containsStr(output, "accent: '#635BFF',") {
+		t.Errorf("output should contain accent color")
+	}
+	if !containsStr(output, "dark: '#0A2540',") {
+		t.Errorf("output should contain dark color")
+	}
+	if !containsStr(output, "light: '#FFFFFF',") {
+		t.Errorf("output should contain light color")
+	}
+
+	// Check fontFamily section
+	if !containsStr(output, "fontFamily: {") {
+		t.Errorf("output should contain fontFamily: {")
+	}
+	if !containsStr(output, `title: ['"Sohne Var"', 'sans-serif'],`) {
+		t.Errorf("output should contain title font with double quotes and fallback")
+	}
+	if !containsStr(output, `body: ['"Sohne Var"', 'sans-serif'],`) {
+		t.Errorf("output should contain body font with double quotes and fallback")
+	}
+}
+
+func TestQuickCmd_Tailwind_DuplicateColors(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "TestBrand",
+				Domain: "test.com",
+				Colors: []api.Color{
+					{Hex: "#FF0000", Type: "brand"},
+					{Hex: "#00FF00", Type: "brand"},
+					{Hex: "#0000FF", Type: "brand"},
+					{Hex: "#FFFFFF", Type: "light"},
+				},
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	tailwindOutput = true
+	defer func() { tailwindOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"test.com", "--tailwind"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Duplicate types should use nested object format with all values grouped
+	if !containsStr(output, "brand: {") {
+		t.Errorf("output should contain brand nested object")
+	}
+	if !containsStr(output, "1: '#FF0000',") {
+		t.Errorf("output should contain 1: '#FF0000'")
+	}
+	if !containsStr(output, "2: '#00FF00',") {
+		t.Errorf("output should contain 2: '#00FF00'")
+	}
+	if !containsStr(output, "3: '#0000FF',") {
+		t.Errorf("output should contain 3: '#0000FF'")
+	}
+
+	// Non-duplicate should NOT use nested object
+	if !containsStr(output, "light: '#FFFFFF',") {
+		t.Errorf("output should contain light color without nesting")
+	}
+}
+
+func TestQuickCmd_Tailwind_MutuallyExclusiveWithJSON(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Test",
+				Domain: "test.com",
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "json"
+	tailwindOutput = true
+	defer func() {
+		outputFormat = "text"
+		tailwindOutput = false
+	}()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"test.com", "--tailwind"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("Execute() should return error for mutually exclusive flags")
+	}
+
+	if !containsStr(err.Error(), "mutually exclusive") {
+		t.Errorf("error should mention 'mutually exclusive', got: %v", err)
+	}
+}
+
+func TestQuickCmd_Tailwind_MutuallyExclusiveWithCSS(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Test",
+				Domain: "test.com",
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	tailwindOutput = true
+	cssOutput = true
+	defer func() {
+		tailwindOutput = false
+		cssOutput = false
+	}()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"test.com", "--tailwind", "--css"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("Execute() should return error for mutually exclusive flags")
+	}
+
+	if !containsStr(err.Error(), "mutually exclusive") {
+		t.Errorf("error should mention 'mutually exclusive', got: %v", err)
+	}
+}
+
+func TestQuickCmd_Tailwind_EmptyColorsAndFonts(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Minimal",
+				Domain: "minimal.com",
+				// No colors or fonts
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	tailwindOutput = true
+	defer func() { tailwindOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"minimal.com", "--tailwind"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Should still have valid structure
+	if !containsStr(output, "module.exports = {") {
+		t.Errorf("output should contain module.exports = {")
+	}
+	if !containsStr(output, "}") {
+		t.Errorf("output should contain closing brace")
+	}
+
+	// Should NOT have colors or fontFamily sections
+	if containsStr(output, "colors: {") {
+		t.Errorf("output should not contain colors section when no colors")
+	}
+	if containsStr(output, "fontFamily: {") {
+		t.Errorf("output should not contain fontFamily section when no fonts")
+	}
+}

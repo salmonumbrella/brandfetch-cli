@@ -654,3 +654,211 @@ func TestFormatQuickCSS_FontsWithSpecialChars(t *testing.T) {
 		t.Errorf("output should quote font name with spaces")
 	}
 }
+
+func TestFormatQuickTailwind_Basic(t *testing.T) {
+	result := &QuickResult{
+		Name:   "Stripe",
+		Domain: "stripe.com",
+		Colors: []ColorInfo{
+			{Hex: "#635BFF", Type: "accent", Brightness: 50},
+			{Hex: "#0A2540", Type: "dark", Brightness: 10},
+			{Hex: "#FFFFFF", Type: "light", Brightness: 100},
+		},
+		Fonts: []FontInfo{
+			{Name: "Sohne Var", Type: "title"},
+			{Name: "Sohne Var", Type: "body"},
+		},
+	}
+
+	output := FormatQuickTailwind(result)
+
+	// Check header comments
+	if !strings.Contains(output, "// Tailwind CSS config for Stripe") {
+		t.Errorf("output should contain brand name in comment")
+	}
+	if !strings.Contains(output, "// Add to your tailwind.config.js theme.extend") {
+		t.Errorf("output should contain usage hint comment")
+	}
+
+	// Check module.exports structure
+	if !strings.Contains(output, "module.exports = {") {
+		t.Errorf("output should contain module.exports = {")
+	}
+	if !strings.HasSuffix(output, "}") {
+		t.Errorf("output should end with }")
+	}
+
+	// Check colors section
+	if !strings.Contains(output, "colors: {") {
+		t.Errorf("output should contain colors: {")
+	}
+	if !strings.Contains(output, "accent: '#635BFF',") {
+		t.Errorf("output should contain accent color")
+	}
+	if !strings.Contains(output, "dark: '#0A2540',") {
+		t.Errorf("output should contain dark color")
+	}
+	if !strings.Contains(output, "light: '#FFFFFF',") {
+		t.Errorf("output should contain light color")
+	}
+
+	// Check fontFamily section
+	if !strings.Contains(output, "fontFamily: {") {
+		t.Errorf("output should contain fontFamily: {")
+	}
+	if !strings.Contains(output, `title: ['"Sohne Var"', 'sans-serif'],`) {
+		t.Errorf("output should contain title font with double quotes and fallback")
+	}
+	if !strings.Contains(output, `body: ['"Sohne Var"', 'sans-serif'],`) {
+		t.Errorf("output should contain body font with double quotes and fallback")
+	}
+}
+
+func TestFormatQuickTailwind_DuplicateColorTypes(t *testing.T) {
+	result := &QuickResult{
+		Name: "Test",
+		Colors: []ColorInfo{
+			{Hex: "#FF0000", Type: "brand"},
+			{Hex: "#00FF00", Type: "brand"},
+			{Hex: "#0000FF", Type: "brand"},
+			{Hex: "#FFFFFF", Type: "light"},
+		},
+	}
+
+	output := FormatQuickTailwind(result)
+
+	// Duplicate types should use nested object format with all values grouped
+	if !strings.Contains(output, "brand: {") {
+		t.Errorf("output should contain brand nested object")
+	}
+	if !strings.Contains(output, "1: '#FF0000',") {
+		t.Errorf("output should contain 1: '#FF0000'")
+	}
+	if !strings.Contains(output, "2: '#00FF00',") {
+		t.Errorf("output should contain 2: '#00FF00'")
+	}
+	if !strings.Contains(output, "3: '#0000FF',") {
+		t.Errorf("output should contain 3: '#0000FF'")
+	}
+
+	// Non-duplicate should NOT use nested object
+	if !strings.Contains(output, "light: '#FFFFFF',") {
+		t.Errorf("output should contain light color without nesting")
+	}
+	if strings.Contains(output, "light: {") {
+		t.Errorf("output should not nest non-duplicate types")
+	}
+}
+
+func TestFormatQuickTailwind_DuplicateFontTypes(t *testing.T) {
+	result := &QuickResult{
+		Name: "Test",
+		Fonts: []FontInfo{
+			{Name: "Roboto", Type: "body"},
+			{Name: "Open Sans", Type: "body"},
+			{Name: "Inter", Type: "title"},
+		},
+	}
+
+	output := FormatQuickTailwind(result)
+
+	// Duplicate types should be numbered
+	if !strings.Contains(output, `body1: ['"Roboto"', 'sans-serif'],`) {
+		t.Errorf("output should contain body1 for first body font")
+	}
+	if !strings.Contains(output, `body2: ['"Open Sans"', 'sans-serif'],`) {
+		t.Errorf("output should contain body2 for second body font")
+	}
+
+	// Non-duplicate should NOT be numbered
+	if !strings.Contains(output, `title: ['"Inter"', 'sans-serif'],`) {
+		t.Errorf("output should contain title without number")
+	}
+}
+
+func TestFormatQuickTailwind_Empty(t *testing.T) {
+	result := &QuickResult{
+		Name:   "Empty",
+		Domain: "empty.com",
+	}
+
+	output := FormatQuickTailwind(result)
+
+	// Should have valid structure
+	if !strings.Contains(output, "module.exports = {") {
+		t.Errorf("output should contain module.exports = {")
+	}
+	if !strings.HasSuffix(output, "}") {
+		t.Errorf("output should end with }")
+	}
+
+	// Should NOT have colors or fontFamily sections
+	if strings.Contains(output, "colors: {") {
+		t.Errorf("output should not contain colors section when no colors")
+	}
+	if strings.Contains(output, "fontFamily: {") {
+		t.Errorf("output should not contain fontFamily section when no fonts")
+	}
+}
+
+func TestFormatQuickTailwind_OnlyColors(t *testing.T) {
+	result := &QuickResult{
+		Name: "Test",
+		Colors: []ColorInfo{
+			{Hex: "#FF0000", Type: "primary"},
+		},
+	}
+
+	output := FormatQuickTailwind(result)
+
+	if !strings.Contains(output, "colors: {") {
+		t.Errorf("output should contain colors section")
+	}
+	if strings.Contains(output, "fontFamily: {") {
+		t.Errorf("output should not contain fontFamily section when no fonts")
+	}
+	if !strings.Contains(output, "primary: '#FF0000',") {
+		t.Errorf("output should contain primary color")
+	}
+}
+
+func TestFormatQuickTailwind_OnlyFonts(t *testing.T) {
+	result := &QuickResult{
+		Name: "Test",
+		Fonts: []FontInfo{
+			{Name: "Arial", Type: "body"},
+		},
+	}
+
+	output := FormatQuickTailwind(result)
+
+	if strings.Contains(output, "colors: {") {
+		t.Errorf("output should not contain colors section when no colors")
+	}
+	if !strings.Contains(output, "fontFamily: {") {
+		t.Errorf("output should contain fontFamily section")
+	}
+	if !strings.Contains(output, `body: ['"Arial"', 'sans-serif'],`) {
+		t.Errorf("output should contain body font")
+	}
+}
+
+func TestFormatQuickTailwind_FontsWithSpaces(t *testing.T) {
+	result := &QuickResult{
+		Name: "Test",
+		Fonts: []FontInfo{
+			{Name: "Sohne Var", Type: "title"},
+			{Name: "SF Pro Display", Type: "body"},
+		},
+	}
+
+	output := FormatQuickTailwind(result)
+
+	// Font names should be in double quotes inside the array
+	if !strings.Contains(output, `"Sohne Var"`) {
+		t.Errorf("output should contain font name with space in double quotes")
+	}
+	if !strings.Contains(output, `"SF Pro Display"`) {
+		t.Errorf("output should contain font name with spaces in double quotes")
+	}
+}
