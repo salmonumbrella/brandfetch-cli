@@ -460,3 +460,197 @@ func TestFormatFonts_Text_SpecialCharacters(t *testing.T) {
 		t.Errorf("FormatFonts() text not handling special characters")
 	}
 }
+
+func TestFormatQuickCSS_Basic(t *testing.T) {
+	result := &QuickResult{
+		Name:   "Stripe",
+		Domain: "stripe.com",
+		Colors: []ColorInfo{
+			{Hex: "#635BFF", Type: "accent", Brightness: 50},
+			{Hex: "#0A2540", Type: "dark", Brightness: 10},
+			{Hex: "#FFFFFF", Type: "light", Brightness: 100},
+		},
+		Fonts: []FontInfo{
+			{Name: "Sohne Var", Type: "title"},
+			{Name: "Sohne Var", Type: "body"},
+		},
+	}
+
+	output := FormatQuickCSS(result)
+
+	// Check structure
+	if !strings.Contains(output, ":root {") {
+		t.Errorf("output should start with :root {")
+	}
+	if !strings.HasSuffix(output, "}") {
+		t.Errorf("output should end with }")
+	}
+
+	// Check comments
+	if !strings.Contains(output, "/* Colors */") {
+		t.Errorf("output should contain Colors comment")
+	}
+	if !strings.Contains(output, "/* Fonts */") {
+		t.Errorf("output should contain Fonts comment")
+	}
+
+	// Check color variables
+	if !strings.Contains(output, "--color-accent: #635BFF;") {
+		t.Errorf("output should contain accent color")
+	}
+	if !strings.Contains(output, "--color-dark: #0A2540;") {
+		t.Errorf("output should contain dark color")
+	}
+	if !strings.Contains(output, "--color-light: #FFFFFF;") {
+		t.Errorf("output should contain light color")
+	}
+
+	// Check font variables with fallback
+	if !strings.Contains(output, "--font-title: 'Sohne Var', sans-serif;") {
+		t.Errorf("output should contain title font with fallback")
+	}
+	if !strings.Contains(output, "--font-body: 'Sohne Var', sans-serif;") {
+		t.Errorf("output should contain body font with fallback")
+	}
+}
+
+func TestFormatQuickCSS_DuplicateColorTypes(t *testing.T) {
+	result := &QuickResult{
+		Colors: []ColorInfo{
+			{Hex: "#FF0000", Type: "brand"},
+			{Hex: "#00FF00", Type: "brand"},
+			{Hex: "#0000FF", Type: "brand"},
+			{Hex: "#FFFFFF", Type: "light"},
+		},
+	}
+
+	output := FormatQuickCSS(result)
+
+	// Duplicate types should be numbered
+	if !strings.Contains(output, "--color-brand-1: #FF0000;") {
+		t.Errorf("output should contain --color-brand-1")
+	}
+	if !strings.Contains(output, "--color-brand-2: #00FF00;") {
+		t.Errorf("output should contain --color-brand-2")
+	}
+	if !strings.Contains(output, "--color-brand-3: #0000FF;") {
+		t.Errorf("output should contain --color-brand-3")
+	}
+
+	// Non-duplicate should NOT be numbered
+	if !strings.Contains(output, "--color-light: #FFFFFF;") {
+		t.Errorf("output should contain --color-light without number")
+	}
+	if strings.Contains(output, "--color-light-1") {
+		t.Errorf("output should not number non-duplicate types")
+	}
+}
+
+func TestFormatQuickCSS_DuplicateFontTypes(t *testing.T) {
+	result := &QuickResult{
+		Fonts: []FontInfo{
+			{Name: "Roboto", Type: "body"},
+			{Name: "Open Sans", Type: "body"},
+			{Name: "Inter", Type: "title"},
+		},
+	}
+
+	output := FormatQuickCSS(result)
+
+	// Duplicate types should be numbered
+	if !strings.Contains(output, "--font-body-1: 'Roboto', sans-serif;") {
+		t.Errorf("output should contain --font-body-1")
+	}
+	if !strings.Contains(output, "--font-body-2: 'Open Sans', sans-serif;") {
+		t.Errorf("output should contain --font-body-2")
+	}
+
+	// Non-duplicate should NOT be numbered
+	if !strings.Contains(output, "--font-title: 'Inter', sans-serif;") {
+		t.Errorf("output should contain --font-title without number")
+	}
+}
+
+func TestFormatQuickCSS_Empty(t *testing.T) {
+	result := &QuickResult{
+		Name:   "Empty",
+		Domain: "empty.com",
+	}
+
+	output := FormatQuickCSS(result)
+
+	// Should still have valid structure
+	if !strings.Contains(output, ":root {") {
+		t.Errorf("output should contain :root {")
+	}
+	if !strings.HasSuffix(output, "}") {
+		t.Errorf("output should end with }")
+	}
+
+	// Should NOT have comments for empty sections
+	if strings.Contains(output, "/* Colors */") {
+		t.Errorf("output should not contain Colors comment when no colors")
+	}
+	if strings.Contains(output, "/* Fonts */") {
+		t.Errorf("output should not contain Fonts comment when no fonts")
+	}
+}
+
+func TestFormatQuickCSS_OnlyColors(t *testing.T) {
+	result := &QuickResult{
+		Colors: []ColorInfo{
+			{Hex: "#FF0000", Type: "primary"},
+		},
+	}
+
+	output := FormatQuickCSS(result)
+
+	if !strings.Contains(output, "/* Colors */") {
+		t.Errorf("output should contain Colors comment")
+	}
+	if strings.Contains(output, "/* Fonts */") {
+		t.Errorf("output should not contain Fonts comment when no fonts")
+	}
+	if !strings.Contains(output, "--color-primary: #FF0000;") {
+		t.Errorf("output should contain primary color")
+	}
+}
+
+func TestFormatQuickCSS_OnlyFonts(t *testing.T) {
+	result := &QuickResult{
+		Fonts: []FontInfo{
+			{Name: "Arial", Type: "body"},
+		},
+	}
+
+	output := FormatQuickCSS(result)
+
+	if strings.Contains(output, "/* Colors */") {
+		t.Errorf("output should not contain Colors comment when no colors")
+	}
+	if !strings.Contains(output, "/* Fonts */") {
+		t.Errorf("output should contain Fonts comment")
+	}
+	if !strings.Contains(output, "--font-body: 'Arial', sans-serif;") {
+		t.Errorf("output should contain body font")
+	}
+}
+
+func TestFormatQuickCSS_FontsWithSpecialChars(t *testing.T) {
+	result := &QuickResult{
+		Fonts: []FontInfo{
+			{Name: "Sohne Var", Type: "title"},
+			{Name: "SF Pro Display", Type: "body"},
+		},
+	}
+
+	output := FormatQuickCSS(result)
+
+	// Font names should be quoted
+	if !strings.Contains(output, "'Sohne Var'") {
+		t.Errorf("output should quote font name with space")
+	}
+	if !strings.Contains(output, "'SF Pro Display'") {
+		t.Errorf("output should quote font name with spaces")
+	}
+}

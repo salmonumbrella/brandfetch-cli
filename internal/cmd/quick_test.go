@@ -628,3 +628,233 @@ func TestGetExtensionFromURL(t *testing.T) {
 		})
 	}
 }
+
+func TestQuickCmd_CSS(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Stripe",
+				Domain: "stripe.com",
+				Colors: []api.Color{
+					{Hex: "#635BFF", Type: "accent"},
+					{Hex: "#0A2540", Type: "dark"},
+					{Hex: "#FFFFFF", Type: "light"},
+				},
+				Fonts: []api.Font{
+					{Name: "Sohne Var", Type: "title"},
+					{Name: "Sohne Var", Type: "body"},
+				},
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	cssOutput = true
+	defer func() { cssOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"stripe.com", "--css"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Check structure
+	if !containsStr(output, ":root {") {
+		t.Errorf("output should contain :root { selector")
+	}
+	if !containsStr(output, "/* Colors */") {
+		t.Errorf("output should contain Colors comment")
+	}
+	if !containsStr(output, "/* Fonts */") {
+		t.Errorf("output should contain Fonts comment")
+	}
+
+	// Check color variables
+	if !containsStr(output, "--color-accent: #635BFF;") {
+		t.Errorf("output should contain accent color variable")
+	}
+	if !containsStr(output, "--color-dark: #0A2540;") {
+		t.Errorf("output should contain dark color variable")
+	}
+	if !containsStr(output, "--color-light: #FFFFFF;") {
+		t.Errorf("output should contain light color variable")
+	}
+
+	// Check font variables with sans-serif fallback
+	if !containsStr(output, "--font-title: 'Sohne Var', sans-serif;") {
+		t.Errorf("output should contain title font variable with fallback")
+	}
+	if !containsStr(output, "--font-body: 'Sohne Var', sans-serif;") {
+		t.Errorf("output should contain body font variable with fallback")
+	}
+}
+
+func TestQuickCmd_CSS_DuplicateColors(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "TestBrand",
+				Domain: "test.com",
+				Colors: []api.Color{
+					{Hex: "#FF0000", Type: "brand"},
+					{Hex: "#00FF00", Type: "brand"},
+					{Hex: "#0000FF", Type: "brand"},
+					{Hex: "#FFFFFF", Type: "light"},
+				},
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	cssOutput = true
+	defer func() { cssOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"test.com", "--css"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Duplicate types should get numbered
+	if !containsStr(output, "--color-brand-1: #FF0000;") {
+		t.Errorf("output should contain --color-brand-1")
+	}
+	if !containsStr(output, "--color-brand-2: #00FF00;") {
+		t.Errorf("output should contain --color-brand-2")
+	}
+	if !containsStr(output, "--color-brand-3: #0000FF;") {
+		t.Errorf("output should contain --color-brand-3")
+	}
+
+	// Non-duplicate should not have number
+	if !containsStr(output, "--color-light: #FFFFFF;") {
+		t.Errorf("output should contain --color-light without number")
+	}
+}
+
+func TestQuickCmd_CSS_DuplicateFonts(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "TestBrand",
+				Domain: "test.com",
+				Fonts: []api.Font{
+					{Name: "Roboto", Type: "body"},
+					{Name: "Open Sans", Type: "body"},
+				},
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	cssOutput = true
+	defer func() { cssOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"test.com", "--css"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Duplicate font types should get numbered
+	if !containsStr(output, "--font-body-1: 'Roboto', sans-serif;") {
+		t.Errorf("output should contain --font-body-1")
+	}
+	if !containsStr(output, "--font-body-2: 'Open Sans', sans-serif;") {
+		t.Errorf("output should contain --font-body-2")
+	}
+}
+
+func TestQuickCmd_CSS_MutuallyExclusiveWithJSON(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Test",
+				Domain: "test.com",
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "json"
+	cssOutput = true
+	defer func() {
+		outputFormat = "text"
+		cssOutput = false
+	}()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"test.com", "--css"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("Execute() should return error for mutually exclusive flags")
+	}
+
+	if !containsStr(err.Error(), "mutually exclusive") {
+		t.Errorf("error should mention 'mutually exclusive', got: %v", err)
+	}
+}
+
+func TestQuickCmd_CSS_EmptyColorsAndFonts(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Minimal",
+				Domain: "minimal.com",
+				// No colors or fonts
+			}, nil
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	cssOutput = true
+	defer func() { cssOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"minimal.com", "--css"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Should still have valid CSS structure
+	if !containsStr(output, ":root {") {
+		t.Errorf("output should contain :root {")
+	}
+	if !containsStr(output, "}") {
+		t.Errorf("output should contain closing brace")
+	}
+
+	// Should NOT have comments for empty sections
+	if containsStr(output, "/* Colors */") {
+		t.Errorf("output should not contain Colors comment when no colors")
+	}
+	if containsStr(output, "/* Fonts */") {
+		t.Errorf("output should not contain Fonts comment when no fonts")
+	}
+}

@@ -240,3 +240,103 @@ func FormatQuick(result *QuickResult, format Format) string {
 
 	return sb.String()
 }
+
+// FormatQuickCSS formats quick result as CSS custom properties.
+func FormatQuickCSS(result *QuickResult) string {
+	var sb strings.Builder
+	sb.WriteString(":root {\n")
+
+	// Colors
+	if len(result.Colors) > 0 {
+		sb.WriteString("  /* Colors */\n")
+		colorVars := buildColorVariables(result.Colors)
+		for _, v := range colorVars {
+			sb.WriteString(fmt.Sprintf("  %s: %s;\n", v.name, v.value))
+		}
+	}
+
+	// Fonts
+	if len(result.Fonts) > 0 {
+		if len(result.Colors) > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("  /* Fonts */\n")
+		fontVars := buildFontVariables(result.Fonts)
+		for _, v := range fontVars {
+			sb.WriteString(fmt.Sprintf("  %s: %s;\n", v.name, v.value))
+		}
+	}
+
+	sb.WriteString("}")
+	return sb.String()
+}
+
+type cssVar struct {
+	name  string
+	value string
+}
+
+// buildColorVariables generates CSS variable names for colors, handling duplicates.
+func buildColorVariables(colors []ColorInfo) []cssVar {
+	// Count occurrences of each type
+	typeCounts := make(map[string]int)
+	for _, c := range colors {
+		typeCounts[c.Type]++
+	}
+
+	// Track which types we've seen (for numbering duplicates)
+	typeIndex := make(map[string]int)
+
+	var vars []cssVar
+	for _, c := range colors {
+		varName := fmt.Sprintf("--color-%s", c.Type)
+
+		// If there are duplicates of this type, append a number
+		if typeCounts[c.Type] > 1 {
+			typeIndex[c.Type]++
+			varName = fmt.Sprintf("--color-%s-%d", c.Type, typeIndex[c.Type])
+		}
+
+		vars = append(vars, cssVar{name: varName, value: c.Hex})
+	}
+
+	return vars
+}
+
+// buildFontVariables generates CSS variable names for fonts, handling duplicates.
+func buildFontVariables(fonts []FontInfo) []cssVar {
+	// Count occurrences of each type
+	typeCounts := make(map[string]int)
+	for _, f := range fonts {
+		typeCounts[f.Type]++
+	}
+
+	// Track which types we've seen (for numbering duplicates)
+	typeIndex := make(map[string]int)
+
+	// Track unique fonts for deduplication (same name + type = skip)
+	seen := make(map[string]bool)
+
+	var vars []cssVar
+	for _, f := range fonts {
+		key := f.Name + "|" + f.Type
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		varName := fmt.Sprintf("--font-%s", f.Type)
+
+		// If there are duplicates of this type (after dedup), append a number
+		if typeCounts[f.Type] > 1 {
+			typeIndex[f.Type]++
+			varName = fmt.Sprintf("--font-%s-%d", f.Type, typeIndex[f.Type])
+		}
+
+		// Quote font name and add sans-serif fallback
+		value := fmt.Sprintf("'%s', sans-serif", f.Name)
+		vars = append(vars, cssVar{name: varName, value: value})
+	}
+
+	return vars
+}

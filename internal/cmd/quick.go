@@ -17,6 +17,7 @@ import (
 )
 
 var downloadDir string
+var cssOutput bool
 
 // HTTPClient interface for downloading files (allows mocking in tests).
 type HTTPClient interface {
@@ -36,7 +37,8 @@ Uses the Brand API which has limited quota.
 Examples:
   brandfetch quick stripe.com
   brandfetch quick shopline.com --output json
-  brandfetch quick stripe.com --download ./brand-assets/`,
+  brandfetch quick stripe.com --download ./brand-assets/
+  brandfetch quick stripe.com --css`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := createClient()
@@ -48,6 +50,7 @@ Examples:
 	}
 
 	cmd.Flags().StringVarP(&downloadDir, "download", "d", "", "Download assets to specified directory")
+	cmd.Flags().BoolVar(&cssOutput, "css", false, "Output colors and fonts as CSS custom properties")
 
 	return cmd
 }
@@ -65,6 +68,7 @@ func newQuickCmdWithClients(client APIClient, httpClient HTTPClient) *cobra.Comm
 		},
 	}
 	cmd.Flags().StringVarP(&downloadDir, "download", "d", "", "Download assets to specified directory")
+	cmd.Flags().BoolVar(&cssOutput, "css", false, "Output colors and fonts as CSS custom properties")
 	return cmd
 }
 
@@ -75,15 +79,25 @@ func runQuickCmd(cmd *cobra.Command, args []string, client APIClient, httpClient
 		ctx = context.Background()
 	}
 
+	// Check for mutually exclusive flags
+	if cssOutput && outputFormat == "json" {
+		return fmt.Errorf("--css and --output json are mutually exclusive")
+	}
+
 	brand, err := client.GetBrand(ctx, domain)
 	if err != nil {
 		return err
 	}
 
-	format, _ := output.ParseFormat(outputFormat)
 	result := convertBrandToQuickResult(brand)
 
-	fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuick(result, format))
+	// Output based on format
+	if cssOutput {
+		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickCSS(result))
+	} else {
+		format, _ := output.ParseFormat(outputFormat)
+		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuick(result, format))
+	}
 
 	// Download assets if --download flag is specified
 	if downloadDir != "" {
