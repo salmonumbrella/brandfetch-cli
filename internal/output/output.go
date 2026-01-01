@@ -443,3 +443,285 @@ func buildFontVariables(fonts []FontInfo) []cssVar {
 
 	return vars
 }
+
+// FormatQuickBatch formats multiple quick results for batch output.
+func FormatQuickBatch(results []*QuickResult, format Format) string {
+	if len(results) == 0 {
+		return ""
+	}
+
+	// Single result: use original format
+	if len(results) == 1 {
+		return FormatQuick(results[0], format)
+	}
+
+	if format == FormatJSON {
+		data, _ := json.MarshalIndent(results, "", "  ")
+		return string(data)
+	}
+
+	// Text format: separate each brand with blank line
+	var sb strings.Builder
+	for i, result := range results {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(FormatQuick(result, format))
+	}
+	return sb.String()
+}
+
+// FormatQuickCSSBatch formats multiple quick results as CSS with brand-prefixed variables.
+func FormatQuickCSSBatch(results []*QuickResult) string {
+	if len(results) == 0 {
+		return ":root {\n}"
+	}
+
+	// Single result: use original format
+	if len(results) == 1 {
+		return FormatQuickCSS(results[0])
+	}
+
+	var sb strings.Builder
+	sb.WriteString(":root {\n")
+
+	for i, result := range results {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		brandPrefix := sanitizeCSSName(result.Domain)
+		sb.WriteString(fmt.Sprintf("  /* %s */\n", result.Name))
+
+		// Colors
+		if len(result.Colors) > 0 {
+			colorVars := buildColorVariablesWithPrefix(result.Colors, brandPrefix)
+			for _, v := range colorVars {
+				sb.WriteString(fmt.Sprintf("  %s: %s;\n", v.name, v.value))
+			}
+		}
+
+		// Fonts
+		if len(result.Fonts) > 0 {
+			fontVars := buildFontVariablesWithPrefix(result.Fonts, brandPrefix)
+			for _, v := range fontVars {
+				sb.WriteString(fmt.Sprintf("  %s: %s;\n", v.name, v.value))
+			}
+		}
+	}
+
+	sb.WriteString("}")
+	return sb.String()
+}
+
+// sanitizeCSSName converts a domain to a valid CSS variable name prefix.
+func sanitizeCSSName(domain string) string {
+	// Remove common TLDs
+	name := strings.TrimSuffix(domain, ".com")
+	name = strings.TrimSuffix(name, ".io")
+	name = strings.TrimSuffix(name, ".org")
+	name = strings.TrimSuffix(name, ".net")
+	name = strings.TrimSuffix(name, ".co")
+	// Replace dots with hyphens
+	name = strings.ReplaceAll(name, ".", "-")
+	return name
+}
+
+// buildColorVariablesWithPrefix generates CSS variable names with brand prefix.
+func buildColorVariablesWithPrefix(colors []ColorInfo, prefix string) []cssVar {
+	typeCounts := make(map[string]int)
+	for _, c := range colors {
+		typeCounts[c.Type]++
+	}
+
+	typeIndex := make(map[string]int)
+
+	var vars []cssVar
+	for _, c := range colors {
+		varName := fmt.Sprintf("--%s-color-%s", prefix, c.Type)
+
+		if typeCounts[c.Type] > 1 {
+			typeIndex[c.Type]++
+			varName = fmt.Sprintf("--%s-color-%s-%d", prefix, c.Type, typeIndex[c.Type])
+		}
+
+		vars = append(vars, cssVar{name: varName, value: c.Hex})
+	}
+
+	return vars
+}
+
+// buildFontVariablesWithPrefix generates CSS font variable names with brand prefix.
+func buildFontVariablesWithPrefix(fonts []FontInfo, prefix string) []cssVar {
+	typeCounts := make(map[string]int)
+	for _, f := range fonts {
+		typeCounts[f.Type]++
+	}
+
+	typeIndex := make(map[string]int)
+	seen := make(map[string]bool)
+
+	var vars []cssVar
+	for _, f := range fonts {
+		key := f.Name + "|" + f.Type
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		varName := fmt.Sprintf("--%s-font-%s", prefix, f.Type)
+
+		if typeCounts[f.Type] > 1 {
+			typeIndex[f.Type]++
+			varName = fmt.Sprintf("--%s-font-%s-%d", prefix, f.Type, typeIndex[f.Type])
+		}
+
+		value := fmt.Sprintf("'%s', sans-serif", f.Name)
+		vars = append(vars, cssVar{name: varName, value: value})
+	}
+
+	return vars
+}
+
+// FormatQuickTailwindBatch formats multiple quick results as Tailwind config with nested brand objects.
+func FormatQuickTailwindBatch(results []*QuickResult) string {
+	if len(results) == 0 {
+		return "module.exports = {\n}"
+	}
+
+	// Single result: use original format
+	if len(results) == 1 {
+		return FormatQuickTailwind(results[0])
+	}
+
+	var sb strings.Builder
+	sb.WriteString("// Tailwind CSS config for multiple brands\n")
+	sb.WriteString("// Add to your tailwind.config.js theme.extend\n")
+	sb.WriteString("module.exports = {\n")
+
+	// Colors section
+	hasColors := false
+	for _, result := range results {
+		if len(result.Colors) > 0 {
+			hasColors = true
+			break
+		}
+	}
+
+	if hasColors {
+		sb.WriteString("  colors: {\n")
+		for _, result := range results {
+			if len(result.Colors) == 0 {
+				continue
+			}
+			brandKey := sanitizeTailwindKey(result.Domain)
+			sb.WriteString(fmt.Sprintf("    %s: {\n", brandKey))
+			colorEntries := buildTailwindColorsNested(result.Colors)
+			for _, entry := range colorEntries {
+				sb.WriteString(entry)
+			}
+			sb.WriteString("    },\n")
+		}
+		sb.WriteString("  },\n")
+	}
+
+	// Fonts section
+	hasFonts := false
+	for _, result := range results {
+		if len(result.Fonts) > 0 {
+			hasFonts = true
+			break
+		}
+	}
+
+	if hasFonts {
+		sb.WriteString("  fontFamily: {\n")
+		for _, result := range results {
+			if len(result.Fonts) == 0 {
+				continue
+			}
+			brandKey := sanitizeTailwindKey(result.Domain)
+			sb.WriteString(fmt.Sprintf("    %s: {\n", brandKey))
+			fontEntries := buildTailwindFontsNested(result.Fonts)
+			for _, entry := range fontEntries {
+				sb.WriteString(entry)
+			}
+			sb.WriteString("    },\n")
+		}
+		sb.WriteString("  },\n")
+	}
+
+	sb.WriteString("}")
+	return sb.String()
+}
+
+// sanitizeTailwindKey converts a domain to a valid Tailwind config key.
+func sanitizeTailwindKey(domain string) string {
+	name := strings.TrimSuffix(domain, ".com")
+	name = strings.TrimSuffix(name, ".io")
+	name = strings.TrimSuffix(name, ".org")
+	name = strings.TrimSuffix(name, ".net")
+	name = strings.TrimSuffix(name, ".co")
+	name = strings.ReplaceAll(name, ".", "_")
+	name = strings.ReplaceAll(name, "-", "_")
+	return name
+}
+
+// buildTailwindColorsNested generates Tailwind color entries for nesting inside a brand object.
+func buildTailwindColorsNested(colors []ColorInfo) []string {
+	typeColors := make(map[string][]string)
+	typeOrder := []string{}
+
+	for _, c := range colors {
+		if _, exists := typeColors[c.Type]; !exists {
+			typeOrder = append(typeOrder, c.Type)
+		}
+		typeColors[c.Type] = append(typeColors[c.Type], c.Hex)
+	}
+
+	var entries []string
+	for _, colorType := range typeOrder {
+		hexValues := typeColors[colorType]
+		if len(hexValues) == 1 {
+			entries = append(entries, fmt.Sprintf("      %s: '%s',\n", colorType, hexValues[0]))
+		} else {
+			var nested strings.Builder
+			nested.WriteString(fmt.Sprintf("      %s: {\n", colorType))
+			for i, hex := range hexValues {
+				nested.WriteString(fmt.Sprintf("        %d: '%s',\n", i+1, hex))
+			}
+			nested.WriteString("      },\n")
+			entries = append(entries, nested.String())
+		}
+	}
+
+	return entries
+}
+
+// buildTailwindFontsNested generates Tailwind font entries for nesting inside a brand object.
+func buildTailwindFontsNested(fonts []FontInfo) []string {
+	typeCounts := make(map[string]int)
+	for _, f := range fonts {
+		typeCounts[f.Type]++
+	}
+
+	typeIndex := make(map[string]int)
+	seen := make(map[string]bool)
+
+	var entries []string
+	for _, f := range fonts {
+		key := f.Name + "|" + f.Type
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		if typeCounts[f.Type] > 1 {
+			typeIndex[f.Type]++
+			entries = append(entries, fmt.Sprintf("      %s%d: ['\"%s\"', 'sans-serif'],\n", f.Type, typeIndex[f.Type], f.Name))
+		} else {
+			entries = append(entries, fmt.Sprintf("      %s: ['\"%s\"', 'sans-serif'],\n", f.Type, f.Name))
+		}
+	}
+
+	return entries
+}

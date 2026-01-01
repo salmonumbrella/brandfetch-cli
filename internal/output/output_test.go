@@ -862,3 +862,286 @@ func TestFormatQuickTailwind_FontsWithSpaces(t *testing.T) {
 		t.Errorf("output should contain font name with spaces in double quotes")
 	}
 }
+
+// Batch mode tests
+
+func TestFormatQuickBatch_SingleResult(t *testing.T) {
+	results := []*QuickResult{
+		{
+			Name:   "Stripe",
+			Domain: "stripe.com",
+			Colors: []ColorInfo{{Hex: "#635BFF", Type: "accent"}},
+		},
+	}
+
+	// Single result should use original format (not array for JSON)
+	output := FormatQuickBatch(results, FormatJSON)
+	if strings.HasPrefix(output, "[") {
+		t.Errorf("single result should not be an array: %s", output)
+	}
+
+	var result QuickResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("output should be valid single JSON object: %v", err)
+	}
+	if result.Name != "Stripe" {
+		t.Errorf("expected Stripe, got %s", result.Name)
+	}
+}
+
+func TestFormatQuickBatch_MultipleResults_JSON(t *testing.T) {
+	results := []*QuickResult{
+		{Name: "Stripe", Domain: "stripe.com", Colors: []ColorInfo{{Hex: "#635BFF", Type: "accent"}}},
+		{Name: "GitHub", Domain: "github.com", Colors: []ColorInfo{{Hex: "#24292f", Type: "dark"}}},
+	}
+
+	output := FormatQuickBatch(results, FormatJSON)
+
+	var parsed []QuickResult
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON array: %v", err)
+	}
+
+	if len(parsed) != 2 {
+		t.Errorf("expected 2 results, got %d", len(parsed))
+	}
+	if parsed[0].Name != "Stripe" {
+		t.Errorf("first result should be Stripe")
+	}
+	if parsed[1].Name != "GitHub" {
+		t.Errorf("second result should be GitHub")
+	}
+}
+
+func TestFormatQuickBatch_MultipleResults_Text(t *testing.T) {
+	results := []*QuickResult{
+		{Name: "Stripe", Domain: "stripe.com"},
+		{Name: "GitHub", Domain: "github.com"},
+	}
+
+	output := FormatQuickBatch(results, FormatText)
+
+	if !strings.Contains(output, "Stripe") {
+		t.Errorf("output should contain Stripe")
+	}
+	if !strings.Contains(output, "GitHub") {
+		t.Errorf("output should contain GitHub")
+	}
+
+	// Should have blank line between results (the separator)
+	if !strings.Contains(output, "\n\n") {
+		t.Errorf("output should have blank line between results")
+	}
+}
+
+func TestFormatQuickBatch_Empty(t *testing.T) {
+	var results []*QuickResult
+
+	output := FormatQuickBatch(results, FormatText)
+	if output != "" {
+		t.Errorf("empty results should return empty string")
+	}
+}
+
+func TestFormatQuickCSSBatch_SingleResult(t *testing.T) {
+	results := []*QuickResult{
+		{
+			Name:   "Stripe",
+			Domain: "stripe.com",
+			Colors: []ColorInfo{{Hex: "#635BFF", Type: "accent"}},
+		},
+	}
+
+	output := FormatQuickCSSBatch(results)
+
+	// Single result should NOT have brand prefix
+	if !strings.Contains(output, "--color-accent: #635BFF;") {
+		t.Errorf("single result should not have brand prefix: %s", output)
+	}
+	if strings.Contains(output, "--stripe-") {
+		t.Errorf("single result should not have brand prefix")
+	}
+}
+
+func TestFormatQuickCSSBatch_MultipleResults(t *testing.T) {
+	results := []*QuickResult{
+		{Name: "Stripe", Domain: "stripe.com", Colors: []ColorInfo{{Hex: "#635BFF", Type: "accent"}}},
+		{Name: "GitHub", Domain: "github.com", Colors: []ColorInfo{{Hex: "#24292f", Type: "dark"}}},
+	}
+
+	output := FormatQuickCSSBatch(results)
+
+	// Should have brand-prefixed variables
+	if !strings.Contains(output, "--stripe-color-accent: #635BFF;") {
+		t.Errorf("output should have stripe-prefixed variable: %s", output)
+	}
+	if !strings.Contains(output, "--github-color-dark: #24292f;") {
+		t.Errorf("output should have github-prefixed variable: %s", output)
+	}
+
+	// Should have brand comments
+	if !strings.Contains(output, "/* Stripe */") {
+		t.Errorf("output should have Stripe comment")
+	}
+	if !strings.Contains(output, "/* GitHub */") {
+		t.Errorf("output should have GitHub comment")
+	}
+}
+
+func TestFormatQuickCSSBatch_WithFonts(t *testing.T) {
+	results := []*QuickResult{
+		{
+			Name:   "Stripe",
+			Domain: "stripe.com",
+			Colors: []ColorInfo{{Hex: "#635BFF", Type: "accent"}},
+			Fonts:  []FontInfo{{Name: "Sohne Var", Type: "title"}},
+		},
+		{
+			Name:   "GitHub",
+			Domain: "github.com",
+			Fonts:  []FontInfo{{Name: "Mona Sans", Type: "body"}},
+		},
+	}
+
+	output := FormatQuickCSSBatch(results)
+
+	if !strings.Contains(output, "--stripe-font-title: 'Sohne Var', sans-serif;") {
+		t.Errorf("output should have stripe-prefixed font: %s", output)
+	}
+	if !strings.Contains(output, "--github-font-body: 'Mona Sans', sans-serif;") {
+		t.Errorf("output should have github-prefixed font: %s", output)
+	}
+}
+
+func TestFormatQuickCSSBatch_Empty(t *testing.T) {
+	var results []*QuickResult
+
+	output := FormatQuickCSSBatch(results)
+
+	if output != ":root {\n}" {
+		t.Errorf("empty results should return valid empty CSS: %s", output)
+	}
+}
+
+func TestFormatQuickTailwindBatch_SingleResult(t *testing.T) {
+	results := []*QuickResult{
+		{
+			Name:   "Stripe",
+			Domain: "stripe.com",
+			Colors: []ColorInfo{{Hex: "#635BFF", Type: "accent"}},
+		},
+	}
+
+	output := FormatQuickTailwindBatch(results)
+
+	// Single result should use original format (no nesting)
+	if !strings.Contains(output, "accent: '#635BFF',") {
+		t.Errorf("single result should not have brand nesting: %s", output)
+	}
+	if strings.Contains(output, "stripe: {") {
+		t.Errorf("single result should not have brand object")
+	}
+}
+
+func TestFormatQuickTailwindBatch_MultipleResults(t *testing.T) {
+	results := []*QuickResult{
+		{Name: "Stripe", Domain: "stripe.com", Colors: []ColorInfo{{Hex: "#635BFF", Type: "accent"}}},
+		{Name: "GitHub", Domain: "github.com", Colors: []ColorInfo{{Hex: "#24292f", Type: "dark"}}},
+	}
+
+	output := FormatQuickTailwindBatch(results)
+
+	// Should have nested brand objects
+	if !strings.Contains(output, "stripe: {") {
+		t.Errorf("output should have stripe nested object: %s", output)
+	}
+	if !strings.Contains(output, "github: {") {
+		t.Errorf("output should have github nested object: %s", output)
+	}
+
+	// Should have header comment for multiple brands
+	if !strings.Contains(output, "// Tailwind CSS config for multiple brands") {
+		t.Errorf("output should have multiple brands comment")
+	}
+}
+
+func TestFormatQuickTailwindBatch_WithFonts(t *testing.T) {
+	results := []*QuickResult{
+		{
+			Name:   "Stripe",
+			Domain: "stripe.com",
+			Fonts:  []FontInfo{{Name: "Sohne Var", Type: "title"}},
+		},
+		{
+			Name:   "GitHub",
+			Domain: "github.com",
+			Fonts:  []FontInfo{{Name: "Mona Sans", Type: "body"}},
+		},
+	}
+
+	output := FormatQuickTailwindBatch(results)
+
+	// Should have fontFamily section with nested brand objects
+	if !strings.Contains(output, "fontFamily: {") {
+		t.Errorf("output should have fontFamily section")
+	}
+	if !strings.Contains(output, "stripe: {") {
+		t.Errorf("output should have stripe nested object in fontFamily")
+	}
+	if !strings.Contains(output, "github: {") {
+		t.Errorf("output should have github nested object in fontFamily")
+	}
+}
+
+func TestFormatQuickTailwindBatch_Empty(t *testing.T) {
+	var results []*QuickResult
+
+	output := FormatQuickTailwindBatch(results)
+
+	if output != "module.exports = {\n}" {
+		t.Errorf("empty results should return valid empty Tailwind config: %s", output)
+	}
+}
+
+func TestSanitizeCSSName(t *testing.T) {
+	tests := []struct {
+		domain string
+		want   string
+	}{
+		{"stripe.com", "stripe"},
+		{"github.com", "github"},
+		{"example.io", "example"},
+		{"api.stripe.com", "api-stripe"},
+		{"my-app.org", "my-app"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.domain, func(t *testing.T) {
+			got := sanitizeCSSName(tt.domain)
+			if got != tt.want {
+				t.Errorf("sanitizeCSSName(%q) = %q, want %q", tt.domain, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeTailwindKey(t *testing.T) {
+	tests := []struct {
+		domain string
+		want   string
+	}{
+		{"stripe.com", "stripe"},
+		{"github.com", "github"},
+		{"my-app.io", "my_app"},
+		{"api.stripe.com", "api_stripe"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.domain, func(t *testing.T) {
+			got := sanitizeTailwindKey(tt.domain)
+			if got != tt.want {
+				t.Errorf("sanitizeTailwindKey(%q) = %q, want %q", tt.domain, got, tt.want)
+			}
+		})
+	}
+}

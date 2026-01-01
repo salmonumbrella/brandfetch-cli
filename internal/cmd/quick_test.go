@@ -1093,3 +1093,439 @@ func TestQuickCmd_Tailwind_EmptyColorsAndFonts(t *testing.T) {
 		t.Errorf("output should not contain fontFamily section when no fonts")
 	}
 }
+
+// Batch mode tests
+
+func TestQuickCmd_Batch_Text(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			switch domain {
+			case "stripe.com":
+				return &api.Brand{
+					Name:   "Stripe",
+					Domain: "stripe.com",
+					Colors: []api.Color{{Hex: "#635BFF", Type: "accent"}},
+				}, nil
+			case "github.com":
+				return &api.Brand{
+					Name:   "GitHub",
+					Domain: "github.com",
+					Colors: []api.Color{{Hex: "#24292f", Type: "dark"}},
+				}, nil
+			default:
+				return nil, errors.New("unknown domain")
+			}
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"stripe.com", "github.com"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Both brands should be present
+	if !containsStr(output, "Stripe") {
+		t.Errorf("output should contain Stripe")
+	}
+	if !containsStr(output, "GitHub") {
+		t.Errorf("output should contain GitHub")
+	}
+	if !containsStr(output, "#635BFF") {
+		t.Errorf("output should contain Stripe color")
+	}
+	if !containsStr(output, "#24292f") {
+		t.Errorf("output should contain GitHub color")
+	}
+}
+
+func TestQuickCmd_Batch_JSON(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			switch domain {
+			case "stripe.com":
+				return &api.Brand{
+					Name:   "Stripe",
+					Domain: "stripe.com",
+					Colors: []api.Color{{Hex: "#635BFF", Type: "accent"}},
+				}, nil
+			case "github.com":
+				return &api.Brand{
+					Name:   "GitHub",
+					Domain: "github.com",
+					Colors: []api.Color{{Hex: "#24292f", Type: "dark"}},
+				}, nil
+			default:
+				return nil, errors.New("unknown domain")
+			}
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "json"
+	defer func() { outputFormat = "text" }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"stripe.com", "github.com"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	// Should be a JSON array
+	var results []map[string]interface{}
+	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil {
+		t.Fatalf("output not valid JSON array: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("expected 2 results, got %d", len(results))
+	}
+
+	if results[0]["name"] != "Stripe" {
+		t.Errorf("first result should be Stripe, got %v", results[0]["name"])
+	}
+	if results[1]["name"] != "GitHub" {
+		t.Errorf("second result should be GitHub, got %v", results[1]["name"])
+	}
+}
+
+func TestQuickCmd_Batch_CSS(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			switch domain {
+			case "stripe.com":
+				return &api.Brand{
+					Name:   "Stripe",
+					Domain: "stripe.com",
+					Colors: []api.Color{{Hex: "#635BFF", Type: "accent"}},
+				}, nil
+			case "github.com":
+				return &api.Brand{
+					Name:   "GitHub",
+					Domain: "github.com",
+					Colors: []api.Color{{Hex: "#24292f", Type: "dark"}},
+				}, nil
+			default:
+				return nil, errors.New("unknown domain")
+			}
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	cssOutput = true
+	defer func() { cssOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"stripe.com", "github.com", "--css"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Should have brand-prefixed variables
+	if !containsStr(output, "--stripe-color-accent: #635BFF;") {
+		t.Errorf("output should contain stripe-prefixed color: %s", output)
+	}
+	if !containsStr(output, "--github-color-dark: #24292f;") {
+		t.Errorf("output should contain github-prefixed color: %s", output)
+	}
+	// Should have brand comments
+	if !containsStr(output, "/* Stripe */") {
+		t.Errorf("output should contain Stripe comment")
+	}
+	if !containsStr(output, "/* GitHub */") {
+		t.Errorf("output should contain GitHub comment")
+	}
+}
+
+func TestQuickCmd_Batch_Tailwind(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			switch domain {
+			case "stripe.com":
+				return &api.Brand{
+					Name:   "Stripe",
+					Domain: "stripe.com",
+					Colors: []api.Color{{Hex: "#635BFF", Type: "accent"}},
+				}, nil
+			case "github.com":
+				return &api.Brand{
+					Name:   "GitHub",
+					Domain: "github.com",
+					Colors: []api.Color{{Hex: "#24292f", Type: "dark"}},
+				}, nil
+			default:
+				return nil, errors.New("unknown domain")
+			}
+		},
+	}
+
+	var stdout bytes.Buffer
+	outputFormat = "text"
+	tailwindOutput = true
+	defer func() { tailwindOutput = false }()
+
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"stripe.com", "github.com", "--tailwind"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Should have nested brand objects
+	if !containsStr(output, "stripe: {") {
+		t.Errorf("output should contain stripe nested object: %s", output)
+	}
+	if !containsStr(output, "github: {") {
+		t.Errorf("output should contain github nested object: %s", output)
+	}
+	if !containsStr(output, "accent: '#635BFF',") {
+		t.Errorf("output should contain accent color")
+	}
+	if !containsStr(output, "dark: '#24292f',") {
+		t.Errorf("output should contain dark color")
+	}
+}
+
+func TestQuickCmd_Batch_Download(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			switch domain {
+			case "stripe.com":
+				return &api.Brand{
+					Name:   "Stripe",
+					Domain: "stripe.com",
+					Logos: []api.Logo{
+						{
+							Type:  "logo",
+							Theme: "light",
+							Formats: []api.LogoFormat{
+								{Src: "https://asset.brandfetch.io/stripe/logo-light.svg", Format: "svg"},
+							},
+						},
+					},
+				}, nil
+			case "github.com":
+				return &api.Brand{
+					Name:   "GitHub",
+					Domain: "github.com",
+					Logos: []api.Logo{
+						{
+							Type:  "logo",
+							Theme: "light",
+							Formats: []api.LogoFormat{
+								{Src: "https://asset.brandfetch.io/github/logo-light.svg", Format: "svg"},
+							},
+						},
+					},
+				}, nil
+			default:
+				return nil, errors.New("unknown domain")
+			}
+		},
+	}
+
+	mockHTTP := &MockHTTPClient{
+		GetFunc: func(url string) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<svg>test</svg>")),
+			}, nil
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	outputFormat = "text"
+	downloadDir = tempDir
+	defer func() { downloadDir = "" }()
+
+	cmd := newQuickCmdWithClients(mock, mockHTTP)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"stripe.com", "github.com", "--download", tempDir})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	// Verify subdirectories were created
+	stripePath := filepath.Join(tempDir, "stripe", "logo-light.svg")
+	if _, err := os.Stat(stripePath); os.IsNotExist(err) {
+		t.Errorf("expected file %s to exist", stripePath)
+	}
+
+	githubPath := filepath.Join(tempDir, "github", "logo-light.svg")
+	if _, err := os.Stat(githubPath); os.IsNotExist(err) {
+		t.Errorf("expected file %s to exist", githubPath)
+	}
+}
+
+func TestQuickCmd_Batch_SingleDomain_NoSubdirectory(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Stripe",
+				Domain: "stripe.com",
+				Logos: []api.Logo{
+					{
+						Type:  "logo",
+						Theme: "light",
+						Formats: []api.LogoFormat{
+							{Src: "https://asset.brandfetch.io/stripe/logo-light.svg", Format: "svg"},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	mockHTTP := &MockHTTPClient{
+		GetFunc: func(url string) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<svg>test</svg>")),
+			}, nil
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	outputFormat = "text"
+	downloadDir = tempDir
+	defer func() { downloadDir = "" }()
+
+	cmd := newQuickCmdWithClients(mock, mockHTTP)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"stripe.com", "--download", tempDir})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	// Single domain should NOT create subdirectory
+	directPath := filepath.Join(tempDir, "logo-light.svg")
+	if _, err := os.Stat(directPath); os.IsNotExist(err) {
+		t.Errorf("expected file %s to exist (no subdirectory for single domain)", directPath)
+	}
+
+	// Should NOT have stripe subdirectory
+	subDirPath := filepath.Join(tempDir, "stripe")
+	if _, err := os.Stat(subDirPath); err == nil {
+		t.Errorf("single domain should not create subdirectory")
+	}
+}
+
+func TestQuickCmd_Batch_PartialFailure(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			switch domain {
+			case "stripe.com":
+				return &api.Brand{
+					Name:   "Stripe",
+					Domain: "stripe.com",
+					Colors: []api.Color{{Hex: "#635BFF", Type: "accent"}},
+				}, nil
+			case "invalid.com":
+				return nil, errors.New("domain not found")
+			default:
+				return nil, errors.New("unknown domain")
+			}
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	outputFormat = "text"
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"stripe.com", "invalid.com"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() should not fail with partial success: %v", err)
+	}
+
+	// Successful result should be in stdout
+	output := stdout.String()
+	if !containsStr(output, "Stripe") {
+		t.Errorf("output should contain successful brand: %s", output)
+	}
+
+	// Error should be reported to stderr
+	stderrStr := stderr.String()
+	if !containsStr(stderrStr, "invalid.com") {
+		t.Errorf("stderr should contain failed domain: %s", stderrStr)
+	}
+}
+
+func TestQuickCmd_Batch_AllFail(t *testing.T) {
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return nil, errors.New("domain not found")
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	outputFormat = "text"
+	cmd := newQuickCmdWithClient(mock)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"invalid1.com", "invalid2.com"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("Execute() should fail when all domains fail")
+	}
+
+	if !containsStr(err.Error(), "failed to fetch all domains") {
+		t.Errorf("error should mention all domains failed: %v", err)
+	}
+}
+
+func TestSanitizeDirName(t *testing.T) {
+	tests := []struct {
+		domain string
+		want   string
+	}{
+		{"stripe.com", "stripe"},
+		{"github.com", "github"},
+		{"example.io", "example"},
+		{"test.org", "test"},
+		{"api.stripe.com", "api-stripe"},
+		{"sub.domain.net", "sub-domain"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.domain, func(t *testing.T) {
+			got := sanitizeDirName(tt.domain)
+			if got != tt.want {
+				t.Errorf("sanitizeDirName(%q) = %q, want %q", tt.domain, got, tt.want)
+			}
+		})
+	}
+}

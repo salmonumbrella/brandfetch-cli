@@ -28,20 +28,31 @@ type HTTPClient interface {
 // NewQuickCmd creates the quick command.
 func NewQuickCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "quick <domain>",
+		Use:   "quick <domain> [domain...]",
 		Short: "Get logos, favicon, colors, and fonts in one command",
 		Long: `Fetch the essentials for brand work: SVG logos (light + dark), favicon, colors, and fonts.
 
 This is a convenience command that extracts the most commonly needed brand assets.
 Uses the Brand API which has limited quota.
 
+Supports batch mode: pass multiple domains to fetch them all at once.
+For text output, each brand is separated by a blank line.
+For JSON output, results are returned as an array.
+For CSS output, variables are prefixed with brand name.
+For Tailwind output, each brand gets a nested object.
+For downloads, subdirectories are created per brand.
+
 Examples:
   brandfetch quick stripe.com
   brandfetch quick shopline.com --output json
   brandfetch quick stripe.com --download ./brand-assets/
   brandfetch quick stripe.com --css
-  brandfetch quick stripe.com --tailwind`,
-		Args: cobra.ExactArgs(1),
+  brandfetch quick stripe.com --tailwind
+  brandfetch quick stripe.com github.com airbnb.com
+  brandfetch quick stripe.com github.com --output json
+  brandfetch quick stripe.com github.com --css
+  brandfetch quick stripe.com github.com --download ./assets/`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := createClient()
 			if err != nil {
@@ -64,8 +75,8 @@ func newQuickCmdWithClient(client APIClient) *cobra.Command {
 
 func newQuickCmdWithClients(client APIClient, httpClient HTTPClient) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:  "quick <domain>",
-		Args: cobra.ExactArgs(1),
+		Use:  "quick <domain> [domain...]",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runQuickCmd(cmd, args, client, httpClient)
 		},
@@ -77,7 +88,6 @@ func newQuickCmdWithClients(client APIClient, httpClient HTTPClient) *cobra.Comm
 }
 
 func runQuickCmd(cmd *cobra.Command, args []string, client APIClient, httpClient HTTPClient) error {
-	domain := args[0]
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
@@ -94,36 +104,76 @@ func runQuickCmd(cmd *cobra.Command, args []string, client APIClient, httpClient
 		return fmt.Errorf("--tailwind and --css are mutually exclusive")
 	}
 
-	brand, err := client.GetBrand(ctx, domain)
-	if err != nil {
-		return err
+	// Fetch all brands, continuing on error
+	var results []*output.QuickResult
+	var fetchErrors []string
+
+	for _, domain := range args {
+		brand, err := client.GetBrand(ctx, domain)
+		if err != nil {
+			fetchErrors = append(fetchErrors, fmt.Sprintf("%s: %v", domain, err))
+			fmt.Fprintf(cmd.ErrOrStderr(), "Error fetching %s: %v\n", domain, err)
+			continue
+		}
+		results = append(results, convertBrandToQuickResult(brand))
 	}
 
-	result := convertBrandToQuickResult(brand)
+	// If no results, return error summary
+	if len(results) == 0 {
+		return fmt.Errorf("failed to fetch all domains: %s", strings.Join(fetchErrors, "; "))
+	}
 
 	// Output based on format
 	if cssOutput {
-		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickCSS(result))
+		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickCSSBatch(results))
 	} else if tailwindOutput {
-		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickTailwind(result))
+		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickTailwindBatch(results))
 	} else {
 		format, _ := output.ParseFormat(outputFormat)
-		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuick(result, format))
+		fmt.Fprintln(cmd.OutOrStdout(), output.FormatQuickBatch(results, format))
 	}
 
 	// Download assets if --download flag is specified
 	if downloadDir != "" {
-		downloadAssets(cmd, result, httpClient)
+		downloadAssetsBatch(cmd, results, httpClient)
 	}
 
 	return nil
 }
 
-// downloadAssets downloads logos and favicon to the specified directory.
-func downloadAssets(cmd *cobra.Command, result *output.QuickResult, httpClient HTTPClient) {
+// downloadAssetsBatch downloads logos and favicon for multiple brands to subdirectories.
+func downloadAssetsBatch(cmd *cobra.Command, results []*output.QuickResult, httpClient HTTPClient) {
+	for _, result := range results {
+		// For batch mode with multiple results, create subdirectory per brand
+		targetDir := downloadDir
+		if len(results) > 1 {
+			// Use sanitized domain as subdirectory name
+			brandDir := sanitizeDirName(result.Domain)
+			targetDir = filepath.Join(downloadDir, brandDir)
+		}
+
+		downloadAssetsToDir(cmd, result, httpClient, targetDir)
+	}
+}
+
+// sanitizeDirName converts a domain to a safe directory name.
+func sanitizeDirName(domain string) string {
+	// Remove common TLDs and special characters for cleaner directory names
+	name := strings.TrimSuffix(domain, ".com")
+	name = strings.TrimSuffix(name, ".io")
+	name = strings.TrimSuffix(name, ".org")
+	name = strings.TrimSuffix(name, ".net")
+	name = strings.TrimSuffix(name, ".co")
+	// Replace any remaining dots with hyphens
+	name = strings.ReplaceAll(name, ".", "-")
+	return name
+}
+
+// downloadAssetsToDir downloads logos and favicon to the specified directory.
+func downloadAssetsToDir(cmd *cobra.Command, result *output.QuickResult, httpClient HTTPClient, targetDir string) {
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(downloadDir, 0755); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Error: failed to create directory %s: %v\n", downloadDir, err)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Error: failed to create directory %s: %v\n", targetDir, err)
 		return
 	}
 
@@ -155,7 +205,7 @@ func downloadAssets(cmd *cobra.Command, result *output.QuickResult, httpClient H
 	}
 
 	for _, d := range downloads {
-		destPath := filepath.Join(downloadDir, d.filename)
+		destPath := filepath.Join(targetDir, d.filename)
 		if err := downloadFile(httpClient, d.url, destPath); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Error: failed to download %s: %v\n", d.filename, err)
 		} else {
