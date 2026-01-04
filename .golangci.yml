@@ -9,12 +9,11 @@ linters:
     - staticcheck
     - typecheck
     - unused
-
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
 
 issues:
   exclude-rules:
