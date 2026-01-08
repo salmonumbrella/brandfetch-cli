@@ -102,17 +102,20 @@ func runLogoDownloadCmd(cmd *cobra.Command, args []string, client APIClient, htt
 	}
 
 	if dir := filepath.Dir(path); dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		err = os.MkdirAll(dir, 0o755)
+		if err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
 
-	if err := downloadFile(httpClient, result.URL, path); err != nil {
+	err = downloadFile(httpClient, result.URL, path)
+	if err != nil {
 		return fmt.Errorf("failed to download logo: %w", err)
 	}
 
 	if logoDownloadSHA256 != "" {
-		ok, err := verifySHA256(path, logoDownloadSHA256)
+		var ok bool
+		ok, err = verifySHA256(path, logoDownloadSHA256)
 		if err != nil {
 			return err
 		}
