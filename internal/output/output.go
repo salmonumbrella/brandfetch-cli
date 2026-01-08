@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -36,6 +37,44 @@ func ParseFormat(s string) (Format, error) {
 	}
 }
 
+// ColorMode represents output color preference.
+type ColorMode int
+
+const (
+	ColorAuto ColorMode = iota
+	ColorAlways
+	ColorNever
+)
+
+// ParseColorMode parses a color mode string.
+func ParseColorMode(s string) (ColorMode, error) {
+	switch strings.ToLower(s) {
+	case "auto":
+		return ColorAuto, nil
+	case "always":
+		return ColorAlways, nil
+	case "never":
+		return ColorNever, nil
+	default:
+		return ColorAuto, fmt.Errorf("invalid color mode: %s (valid: auto, always, never)", s)
+	}
+}
+
+// ResolveColorMode returns whether color should be enabled.
+func ResolveColorMode(mode ColorMode, format Format, noColor bool, isTTY bool) bool {
+	if format == FormatJSON || noColor {
+		return false
+	}
+	switch mode {
+	case ColorAlways:
+		return true
+	case ColorNever:
+		return false
+	default:
+		return isTTY
+	}
+}
+
 // PrintJSON writes data as indented JSON.
 func PrintJSON(w io.Writer, data interface{}) error {
 	enc := json.NewEncoder(w)
@@ -50,9 +89,14 @@ func PrintText(w io.Writer, format string, args ...interface{}) {
 
 // LogoResult represents logo output data.
 type LogoResult struct {
-	URL    string `json:"url"`
-	Format string `json:"format"`
-	Theme  string `json:"theme"`
+	URL        string `json:"url"`
+	Identifier string `json:"identifier,omitempty"`
+	Format     string `json:"format,omitempty"`
+	Theme      string `json:"theme,omitempty"`
+	Type       string `json:"type,omitempty"`
+	Fallback   string `json:"fallback,omitempty"`
+	Width      int    `json:"width,omitempty"`
+	Height     int    `json:"height,omitempty"`
 }
 
 // FormatLogo formats logo result.
@@ -66,13 +110,19 @@ func FormatLogo(logo *LogoResult, format Format) string {
 
 // BrandResult represents brand output data.
 type BrandResult struct {
-	Name        string      `json:"name"`
-	Domain      string      `json:"domain"`
-	Description string      `json:"description,omitempty"`
-	Logos       []LogoInfo  `json:"logos,omitempty"`
-	Colors      []ColorInfo `json:"colors,omitempty"`
-	Fonts       []FontInfo  `json:"fonts,omitempty"`
-	Links       []LinkInfo  `json:"links,omitempty"`
+	ID              string      `json:"id,omitempty"`
+	Name            string      `json:"name"`
+	Domain          string      `json:"domain"`
+	Description     string      `json:"description,omitempty"`
+	LongDescription string      `json:"longDescription,omitempty"`
+	Claimed         bool        `json:"claimed,omitempty"`
+	QualityScore    float64     `json:"qualityScore,omitempty"`
+	IsNSFW          bool        `json:"isNsfw,omitempty"`
+	URN             string      `json:"urn,omitempty"`
+	Logos           []LogoInfo  `json:"logos,omitempty"`
+	Colors          []ColorInfo `json:"colors,omitempty"`
+	Fonts           []FontInfo  `json:"fonts,omitempty"`
+	Links           []LinkInfo  `json:"links,omitempty"`
 }
 
 type LogoInfo struct {
@@ -99,16 +149,35 @@ type LinkInfo struct {
 }
 
 // FormatBrand formats brand result.
-func FormatBrand(brand *BrandResult, format Format) string {
+func FormatBrand(brand *BrandResult, format Format, colorize bool) string {
 	if format == FormatJSON {
 		data, _ := json.MarshalIndent(brand, "", "  ")
 		return string(data)
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s (%s)\n", brand.Name, brand.Domain))
+	if brand.ID != "" {
+		sb.WriteString(fmt.Sprintf("%s (%s) [%s]\n", brand.Name, brand.Domain, brand.ID))
+	} else {
+		sb.WriteString(fmt.Sprintf("%s (%s)\n", brand.Name, brand.Domain))
+	}
 	if brand.Description != "" {
 		sb.WriteString(fmt.Sprintf("\nDescription: %s\n", brand.Description))
+	}
+	if brand.LongDescription != "" {
+		sb.WriteString(fmt.Sprintf("\nAbout: %s\n", brand.LongDescription))
+	}
+	if brand.URN != "" {
+		sb.WriteString(fmt.Sprintf("\nURN: %s\n", brand.URN))
+	}
+	if brand.Claimed {
+		sb.WriteString("\nClaimed: yes\n")
+	}
+	if brand.QualityScore > 0 {
+		sb.WriteString(fmt.Sprintf("Quality score: %.2f\n", brand.QualityScore))
+	}
+	if brand.IsNSFW {
+		sb.WriteString("NSFW: yes\n")
 	}
 
 	if len(brand.Logos) > 0 {
@@ -121,7 +190,7 @@ func FormatBrand(brand *BrandResult, format Format) string {
 	if len(brand.Colors) > 0 {
 		sb.WriteString("\nColors:\n")
 		for _, c := range brand.Colors {
-			sb.WriteString(fmt.Sprintf("  %s (%s)\n", c.Hex, c.Type))
+			sb.WriteString(fmt.Sprintf("  %s (%s)\n", colorizeHex(c.Hex, colorize), c.Type))
 		}
 	}
 
@@ -137,13 +206,15 @@ func FormatBrand(brand *BrandResult, format Format) string {
 
 // SearchResult represents search output data.
 type SearchResult struct {
-	Name   string `json:"name"`
-	Domain string `json:"domain"`
-	Icon   string `json:"icon,omitempty"`
+	Name    string `json:"name"`
+	Domain  string `json:"domain"`
+	Icon    string `json:"icon,omitempty"`
+	Claimed bool   `json:"claimed,omitempty"`
+	BrandID string `json:"brandId,omitempty"`
 }
 
 // FormatSearch formats search results.
-func FormatSearch(results []SearchResult, format Format) string {
+func FormatSearch(results []SearchResult, format Format, colorize bool) string {
 	if format == FormatJSON {
 		data, _ := json.MarshalIndent(results, "", "  ")
 		return string(data)
@@ -151,13 +222,20 @@ func FormatSearch(results []SearchResult, format Format) string {
 
 	var sb strings.Builder
 	for _, r := range results {
-		sb.WriteString(fmt.Sprintf("%-30s %s\n", r.Name, r.Domain))
+		domain := r.Domain
+		if r.Claimed {
+			domain = domain + " (claimed)"
+		}
+		if r.BrandID != "" {
+			domain = domain + " [" + r.BrandID + "]"
+		}
+		sb.WriteString(fmt.Sprintf("%-30s %s\n", r.Name, domain))
 	}
 	return sb.String()
 }
 
 // FormatColors formats color palette.
-func FormatColors(colors []ColorInfo, format Format) string {
+func FormatColors(colors []ColorInfo, format Format, colorize bool) string {
 	if format == FormatJSON {
 		data, _ := json.MarshalIndent(colors, "", "  ")
 		return string(data)
@@ -165,13 +243,13 @@ func FormatColors(colors []ColorInfo, format Format) string {
 
 	var sb strings.Builder
 	for _, c := range colors {
-		sb.WriteString(fmt.Sprintf("%s (%s)\n", c.Hex, c.Type))
+		sb.WriteString(fmt.Sprintf("%s (%s)\n", colorizeHex(c.Hex, colorize), c.Type))
 	}
 	return sb.String()
 }
 
 // FormatFonts formats font list.
-func FormatFonts(fonts []FontInfo, format Format) string {
+func FormatFonts(fonts []FontInfo, format Format, colorize bool) string {
 	if format == FormatJSON {
 		data, _ := json.MarshalIndent(fonts, "", "  ")
 		return string(data)
@@ -196,7 +274,7 @@ type QuickResult struct {
 }
 
 // FormatQuick formats quick result (essentials).
-func FormatQuick(result *QuickResult, format Format) string {
+func FormatQuick(result *QuickResult, format Format, colorize bool) string {
 	if format == FormatJSON {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		return string(data)
@@ -226,7 +304,7 @@ func FormatQuick(result *QuickResult, format Format) string {
 	if len(result.Colors) > 0 {
 		sb.WriteString("\nColors:\n")
 		for _, c := range result.Colors {
-			sb.WriteString(fmt.Sprintf("  %s (%s)\n", c.Hex, c.Type))
+			sb.WriteString(fmt.Sprintf("  %s (%s)\n", colorizeHex(c.Hex, colorize), c.Type))
 		}
 	}
 
@@ -445,14 +523,14 @@ func buildFontVariables(fonts []FontInfo) []cssVar {
 }
 
 // FormatQuickBatch formats multiple quick results for batch output.
-func FormatQuickBatch(results []*QuickResult, format Format) string {
+func FormatQuickBatch(results []*QuickResult, format Format, colorize bool) string {
 	if len(results) == 0 {
 		return ""
 	}
 
 	// Single result: use original format
 	if len(results) == 1 {
-		return FormatQuick(results[0], format)
+		return FormatQuick(results[0], format, colorize)
 	}
 
 	if format == FormatJSON {
@@ -466,7 +544,7 @@ func FormatQuickBatch(results []*QuickResult, format Format) string {
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		sb.WriteString(FormatQuick(result, format))
+		sb.WriteString(FormatQuick(result, format, colorize))
 	}
 	return sb.String()
 }
@@ -724,4 +802,22 @@ func buildTailwindFontsNested(fonts []FontInfo) []string {
 	}
 
 	return entries
+}
+
+func colorizeHex(hex string, enabled bool) string {
+	if !enabled {
+		return hex
+	}
+	if len(hex) != 7 || !strings.HasPrefix(hex, "#") {
+		return hex
+	}
+
+	r, err1 := strconv.ParseInt(hex[1:3], 16, 0)
+	g, err2 := strconv.ParseInt(hex[3:5], 16, 0)
+	b, err3 := strconv.ParseInt(hex[5:7], 16, 0)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return hex
+	}
+
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s\x1b[0m", r, g, b, hex)
 }

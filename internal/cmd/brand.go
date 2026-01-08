@@ -13,18 +13,19 @@ import (
 // NewBrandCmd creates the brand command.
 func NewBrandCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "brand <domain>",
-		Short: "Get full brand profile for a domain",
+		Use:   "brand <identifier>",
+		Short: "Get full brand profile for an identifier",
 		Long: `Fetch comprehensive brand data including logos, colors, fonts, and links.
 
 This command uses the Brand API which has limited quota.
 
 Examples:
   brandfetch brand github.com
-  brandfetch brand stripe.com --output json`,
+  brandfetch brand stripe.com --output json
+  brandfetch brand id_123 --output json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := createClient()
+			client, err := createClient(clientRequirements{requireAPIKey: true})
 			if err != nil {
 				return err
 			}
@@ -36,7 +37,7 @@ Examples:
 
 func newBrandCmdWithClient(client APIClient) *cobra.Command {
 	return &cobra.Command{
-		Use:  "brand <domain>",
+		Use:  "brand <identifier>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runBrandCmd(cmd, args, client)
@@ -56,18 +57,30 @@ func runBrandCmd(cmd *cobra.Command, args []string, client APIClient) error {
 		return err
 	}
 
-	format, _ := output.ParseFormat(outputFormat)
+	format, colorize, err := resolveOutput(cmd)
+	if err != nil {
+		return err
+	}
+	if format == output.FormatJSON {
+		return output.PrintJSON(cmd.OutOrStdout(), brand)
+	}
 	result := convertBrandToOutput(brand)
 
-	fmt.Fprintln(cmd.OutOrStdout(), output.FormatBrand(result, format))
+	fmt.Fprintln(cmd.OutOrStdout(), output.FormatBrand(result, format, colorize))
 	return nil
 }
 
 func convertBrandToOutput(brand *api.Brand) *output.BrandResult {
 	result := &output.BrandResult{
-		Name:        brand.Name,
-		Domain:      brand.Domain,
-		Description: brand.Description,
+		ID:              brand.ID,
+		Name:            brand.Name,
+		Domain:          brand.Domain,
+		Description:     brand.Description,
+		LongDescription: brand.LongDescription,
+		Claimed:         brand.Claimed,
+		QualityScore:    brand.QualityScore,
+		IsNSFW:          brand.IsNSFW,
+		URN:             brand.URN,
 	}
 
 	// Convert logos

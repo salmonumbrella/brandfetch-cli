@@ -24,7 +24,7 @@ Examples:
   brandfetch search github --output json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := createClient()
+			client, err := createClient(clientRequirements{requireClientID: true})
 			if err != nil {
 				return err
 			}
@@ -61,18 +61,23 @@ func runSearchCmd(cmd *cobra.Command, args []string, client APIClient) error {
 		return err
 	}
 
-	format, _ := output.ParseFormat(outputFormat)
+	format, colorize, err := resolveOutput(cmd)
+	if err != nil {
+		return err
+	}
 
 	// Convert to output types
 	var outputResults []output.SearchResult
 	for _, r := range results {
 		outputResults = append(outputResults, output.SearchResult{
-			Name:   r.Name,
-			Domain: r.Domain,
-			Icon:   r.Icon,
+			Name:    r.Name,
+			Domain:  r.Domain,
+			Icon:    r.Icon,
+			Claimed: r.Claimed,
+			BrandID: r.BrandID,
 		})
 	}
 
-	fmt.Fprint(cmd.OutOrStdout(), output.FormatSearch(outputResults, format))
+	fmt.Fprint(cmd.OutOrStdout(), output.FormatSearch(outputResults, format, colorize))
 	return nil
 }

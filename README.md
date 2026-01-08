@@ -1,12 +1,15 @@
 # 🎨 Brandfetch CLI — Brand assets in your terminal.
 
-Fetch logos, colors, and fonts for any company.
+Brandfetch in your terminal. Fetch logos, colors, and fonts for any company.
 
 ## Features
 
-- **Brand assets** - download logos in SVG/PNG format, extract colors, and get fonts
-- **Colors & fonts** - extract brand color palettes and typography information
+- **Brand assets** - download logos in SVG/PNG/WebP format, extract colors, and get fonts
+- **Quick mode** - essentials in one call, export CSS/Tailwind, optional downloads + checksums
 - **Search** - find brands by name or keyword
+- **Transaction matching** - resolve transaction labels to brands
+- **Webhooks** - manage webhooks via GraphQL API
+- **GraphQL** - run arbitrary GraphQL queries and mutations
 - **Secure storage** - credentials stored in OS keychain
 - **Theme variants** - fetch light or dark logo variants
 
@@ -32,6 +35,10 @@ Visit [brandfetch.com/developers](https://www.brandfetch.com/developers) to obta
 
 - **Logo API Key / Client ID**: High quota (10,000+ requests/month), supports logo downloads and search
 - **Brand API Key**: Limited quota (100 requests/month), supports full brand metadata including colors and fonts
+
+Command requirements:
+- Logo/Search only need the **Logo API Client ID**
+- Brand/Colors/Fonts/Quick/Transaction/Webhooks need the **Brand API Key**
 
 ### 2. Configure Credentials
 
@@ -78,6 +85,10 @@ Credentials are stored securely in your system's keychain:
 - **Linux**: Secret Service (GNOME Keyring, KWallet)
 - **Windows**: Credential Manager
 
+## Rate Limiting
+
+The Brandfetch API enforces quotas and rate limits based on your API plan. If you hit HTTP 429 or quota errors, back off and retry in your scripts. Logo/Search use the Logo API Client ID (higher quota) while Brand endpoints use the Brand API Key (lower quota).
+
 ## Commands
 
 ### Authentication
@@ -92,17 +103,22 @@ brandfetch auth clear                    # Remove stored credentials
 ### Logo
 
 ```bash
-brandfetch logo <domain>                 # Download logo (SVG, light theme)
-brandfetch logo <domain> --format png    # Download PNG format
-brandfetch logo <domain> --theme dark    # Get dark theme variant
-brandfetch logo <domain> --output json   # Get logo metadata as JSON
+brandfetch logo <identifier>                 # Logo URL (SVG, light theme)
+brandfetch logo <identifier> --format png    # PNG format
+brandfetch logo <identifier> --theme dark    # Dark theme variant
+brandfetch logo <identifier> --type icon     # Icon variant
+brandfetch logo <identifier> --width 256     # Custom width
+brandfetch logo <identifier> --output json   # Logo metadata as JSON
+brandfetch logo download <identifier>        # Download logo asset
+brandfetch logo download <identifier> --path ./logo.svg
+brandfetch logo download <identifier> --sha256 <hex>    # Verify checksum
 ```
 
 ### Brand
 
 ```bash
-brandfetch brand <domain>                # Get comprehensive brand data
-brandfetch brand <domain> --output json  # Get brand data as JSON
+brandfetch brand <identifier>                # Get comprehensive brand data
+brandfetch brand <identifier> --output json  # Full Brand API response as JSON
 ```
 
 Returns brand name, description, industry, domain, social links, colors, fonts, and logo URLs.
@@ -119,8 +135,8 @@ brandfetch search <query> --output json  # Search results as JSON
 ### Colors
 
 ```bash
-brandfetch colors <domain>               # Get brand color palette
-brandfetch colors <domain> --output json # Colors as JSON
+brandfetch colors <identifier>               # Get brand color palette
+brandfetch colors <identifier> --output json # Colors as JSON
 ```
 
 **Note**: Requires Brand API key (limited quota)
@@ -128,11 +144,58 @@ brandfetch colors <domain> --output json # Colors as JSON
 ### Fonts
 
 ```bash
-brandfetch fonts <domain>                # Get brand typography
-brandfetch fonts <domain> --output json  # Fonts as JSON
+brandfetch fonts <identifier>                # Get brand typography
+brandfetch fonts <identifier> --output json  # Fonts as JSON
 ```
 
 **Note**: Requires Brand API key (limited quota)
+
+### Quick
+
+```bash
+brandfetch quick <identifier>                # Logos, favicon, colors, fonts
+brandfetch quick <identifier> --output json  # Essentials as JSON
+brandfetch quick <identifier> --css          # CSS custom properties
+brandfetch quick <identifier> --tailwind     # Tailwind config
+brandfetch quick <identifier> --download ./assets --sha256  # Download + checksums
+brandfetch quick <identifier> --download ./assets --sha256-manifest ./checksums.sha256
+brandfetch quick <identifier> --download ./assets --sha256-manifest-out ./checksums.sha256
+brandfetch quick <identifier> --download ./assets --sha256-manifest-out ./checksums.sha256 --sha256-manifest-append
+brandfetch quick <identifier> --download ./assets --sha256-manifest ./checksums.sha256 --sha256-manifest-verify
+```
+
+### Transaction
+
+```bash
+brandfetch transaction "STARBUCKS 1234 SEATTLE WA"      # Match transaction label
+brandfetch transaction "Spotify USA" --country US       # With country hint
+brandfetch transaction "Spotify USA" --output json      # Full Brand response as JSON
+```
+
+### Webhooks
+
+```bash
+brandfetch webhooks create --url https://example.com/webhooks --events brand.updated,brand.verified
+brandfetch webhooks list
+brandfetch webhooks list --enabled --event brand.updated
+brandfetch webhooks list --url-contains example.com
+brandfetch webhooks list --json-flat
+brandfetch webhooks list --table
+brandfetch webhooks list --table --table-truncate 24
+brandfetch webhooks list --table --columns urn,url,status,events
+brandfetch webhooks subscribe --webhook urn:bf:webhook:123 --subscriptions urn:bf:brand:abc,urn:bf:brand:def
+brandfetch webhooks unsubscribe --webhook urn:bf:webhook:123 --subscriptions urn:bf:brand:abc
+```
+
+### GraphQL
+
+```bash
+brandfetch graphql --query "query { me { id } }"
+brandfetch graphql --query-file ./query.graphql --variables '{"input": {"url": "https://example.com"}}'
+cat query.graphql | brandfetch graphql --stdin
+cat payload.json | brandfetch graphql --stdin-raw
+```
+
 
 ## Output Formats
 
@@ -168,7 +231,7 @@ $ brandfetch brand stripe.com --output json
   "domain": "stripe.com",
   "industry": "Financial Services",
   "colors": [
-    {"hex": "#635BFF", "type": "primary", "brightness": "dark"}
+    {"hex": "#635BFF", "type": "primary", "brightness": 50}
   ],
   "fonts": [
     {"name": "Camphor", "type": "sans-serif", "origin": "custom"}
@@ -244,8 +307,12 @@ All commands support these flags:
 - `--version` - Show version information
 
 Logo command specific flags:
-- `--format <format>` - Logo format: `svg` or `png` (default: svg)
+- `--format <format>` - Logo format: `svg`, `png`, or `webp` (default: svg)
 - `--theme <theme>` - Logo theme: `light` or `dark` (default: light)
+- `--type <type>` - Logo type: `logo`, `icon`, or `symbol` (default: logo)
+- `--fallback <type>` - Fallback type: `lettermark`, `icon`, `symbol`, `brandfetch`, `404`
+- `--width <px>` - Width in pixels
+- `--height <px>` - Height in pixels
 
 ## Shell Completions
 

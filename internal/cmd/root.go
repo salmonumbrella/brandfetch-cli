@@ -44,6 +44,9 @@ func Execute(args []string) error {
 	rootCmd.AddCommand(NewSearchCmd())
 	rootCmd.AddCommand(NewColorsCmd())
 	rootCmd.AddCommand(NewFontsCmd())
+	rootCmd.AddCommand(NewTransactionCmd())
+	rootCmd.AddCommand(NewWebhooksCmd())
+	rootCmd.AddCommand(NewGraphQLCmd())
 	rootCmd.AddCommand(NewAuthCmd())
 
 	rootCmd.SetArgs(args)

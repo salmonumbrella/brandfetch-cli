@@ -67,46 +67,10 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to open keychain: %w", err)
 			}
-			return runAuthLoginCmd(cmd, store)
+			authStdin = false
+			return runAuthSetCmd(cmd, store)
 		},
 	}
-}
-
-func runAuthLoginCmd(cmd *cobra.Command, store SecretsStore) error {
-	server, err := authserver.NewServer()
-	if err != nil {
-		return fmt.Errorf("failed to start auth server: %w", err)
-	}
-	defer func() { _ = server.Shutdown() }()
-
-	server.Start()
-	url := server.URL()
-
-	fmt.Fprintf(cmd.OutOrStdout(), "Opening browser to configure credentials...\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "If browser doesn't open, visit: %s\n\n", url)
-
-	openBrowser(url)
-
-	fmt.Fprintf(cmd.OutOrStdout(), "Waiting for credentials...\n")
-	creds, err := server.WaitForCredentials(5 * time.Minute)
-	if err != nil {
-		return err
-	}
-
-	// Store credentials (at least one must be provided)
-	if creds.ClientID != "" {
-		if err := store.Set("client_id", creds.ClientID); err != nil {
-			return fmt.Errorf("failed to store client_id: %w", err)
-		}
-	}
-	if creds.APIKey != "" {
-		if err := store.Set("api_key", creds.APIKey); err != nil {
-			return fmt.Errorf("failed to store api_key: %w", err)
-		}
-	}
-
-	fmt.Fprintln(cmd.OutOrStdout(), "Credentials saved successfully.")
-	return nil
 }
 
 func newAuthSetCmd() *cobra.Command {
@@ -115,6 +79,7 @@ func newAuthSetCmd() *cobra.Command {
 		Short: "Set API credentials",
 		Long: `Store API credentials in the OS keychain.
 
+You can configure the Logo API client ID, the Brand API key, or both.
 For headless environments, use --stdin to read credentials from stdin.
 
 Examples:
@@ -190,15 +155,19 @@ func runAuthSetCmd(cmd *cobra.Command, store SecretsStore) error {
 		apiKey = creds.APIKey
 	}
 
-	if clientID == "" || apiKey == "" {
-		return fmt.Errorf("both client_id and api_key are required")
+	if clientID == "" && apiKey == "" {
+		return fmt.Errorf("at least one of client_id or api_key is required")
 	}
 
-	if err := store.Set("client_id", clientID); err != nil {
-		return fmt.Errorf("failed to store client_id: %w", err)
+	if clientID != "" {
+		if err := store.Set("client_id", clientID); err != nil {
+			return fmt.Errorf("failed to store client_id: %w", err)
+		}
 	}
-	if err := store.Set("api_key", apiKey); err != nil {
-		return fmt.Errorf("failed to store api_key: %w", err)
+	if apiKey != "" {
+		if err := store.Set("api_key", apiKey); err != nil {
+			return fmt.Errorf("failed to store api_key: %w", err)
+		}
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), "Credentials saved successfully.")

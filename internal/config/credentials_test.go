@@ -75,8 +75,25 @@ func TestCredentials_PartialEnv(t *testing.T) {
 	os.Unsetenv("BRANDFETCH_API_KEY")
 	defer os.Unsetenv("BRANDFETCH_CLIENT_ID")
 
-	_, err := LoadCredentials(nil, "/nonexistent/path/config.json")
+	creds, err := LoadCredentialsWithOptions(nil, "/nonexistent/path/config.json", Requirements{RequireClientID: true})
+	if err != nil {
+		t.Fatalf("LoadCredentialsWithOptions() error = %v", err)
+	}
+	if creds.ClientID != "partial_client_id" {
+		t.Errorf("ClientID = %v, want partial_client_id", creds.ClientID)
+	}
+	if creds.APIKey != "" {
+		t.Errorf("APIKey = %v, want empty", creds.APIKey)
+	}
+}
+
+func TestCredentials_PartialEnv_MissingAPIKey(t *testing.T) {
+	os.Setenv("BRANDFETCH_CLIENT_ID", "partial_client_id")
+	os.Unsetenv("BRANDFETCH_API_KEY")
+	defer os.Unsetenv("BRANDFETCH_CLIENT_ID")
+
+	_, err := LoadCredentialsWithOptions(nil, "/nonexistent/path/config.json", Requirements{RequireAPIKey: true})
 	if err == nil {
-		t.Errorf("LoadCredentials() expected error for partial credentials")
+		t.Errorf("LoadCredentialsWithOptions() expected error for missing API key")
 	}
 }

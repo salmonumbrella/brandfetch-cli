@@ -70,43 +70,19 @@ func TestClient_GetBrand_NotFound(t *testing.T) {
 }
 
 func TestClient_GetLogo(t *testing.T) {
-	// GetLogo now extracts from brand data, so mock the brand endpoint
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer test_api_key" {
-			t.Errorf("expected api_key auth, got: %s", r.Header.Get("Authorization"))
-		}
-
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"name":   "GitHub",
-			"domain": "github.com",
-			"logos": []map[string]interface{}{
-				{
-					"type":  "logo",
-					"theme": "light",
-					"formats": []map[string]interface{}{
-						{
-							"src":    "https://cdn.brandfetch.io/logo.svg",
-							"format": "svg",
-						},
-					},
-				},
-			},
-			"colors": []interface{}{},
-			"fonts":  []interface{}{},
-		})
-	}))
-	defer server.Close()
-
-	client := NewClient("test_client_id", "test_api_key")
-	client.baseURL = server.URL
-
-	logo, err := client.GetLogo(context.Background(), "github.com", "svg", "light")
+	client := NewClient("test_client_id", "")
+	logo, err := client.GetLogo(context.Background(), LogoOptions{
+		Identifier: "github.com",
+		Theme:      "light",
+		Type:       "logo",
+		Format:     "svg",
+	})
 	if err != nil {
 		t.Fatalf("GetLogo() error = %v", err)
 	}
 
-	if logo.URL != "https://cdn.brandfetch.io/logo.svg" {
-		t.Errorf("logo.URL = %v, want https://cdn.brandfetch.io/logo.svg", logo.URL)
+	if logo.URL != "https://cdn.brandfetch.io/github.com/theme/light/type/logo.svg?c=test_client_id" {
+		t.Errorf("logo.URL = %v, want expected Logo API URL", logo.URL)
 	}
 }
 
@@ -121,8 +97,8 @@ func TestClient_Search(t *testing.T) {
 		}
 
 		json.NewEncoder(w).Encode([]map[string]interface{}{
-			{"name": "Starbucks", "domain": "starbucks.com"},
-			{"name": "Dunkin", "domain": "dunkindonuts.com"},
+			{"name": "Starbucks", "domain": "starbucks.com", "brandId": "id_1"},
+			{"name": "Dunkin", "domain": "dunkindonuts.com", "brandId": "id_2"},
 		})
 	}))
 	defer server.Close()
@@ -157,5 +133,65 @@ func TestNormalizeDomain(t *testing.T) {
 		if got := NormalizeDomain(tt.input); got != tt.want {
 			t.Errorf("NormalizeDomain(%q) = %v, want %v", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestNormalizeIdentifier(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"github.com", "github.com"},
+		{"https://github.com", "github.com"},
+		{"id_123", "id_123"},
+		{"urn:brandfetch:brand:abc", "urn:brandfetch:brand:abc"},
+		{"AAPL", "AAPL"},
+	}
+
+	for _, tt := range tests {
+		if got := NormalizeIdentifier(tt.input); got != tt.want {
+			t.Errorf("NormalizeIdentifier(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestClient_CreateTransaction(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/brands/transaction" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+		if r.Header.Get("Authorization") != "Bearer test_api_key" {
+			t.Errorf("unexpected auth header: %s", r.Header.Get("Authorization"))
+		}
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("failed to decode payload: %v", err)
+		}
+		if payload["transactionLabel"] != "SPOTIFY USA" {
+			t.Errorf("transactionLabel = %v, want SPOTIFY USA", payload["transactionLabel"])
+		}
+		if payload["countryCode"] != "US" {
+			t.Errorf("countryCode = %v, want US", payload["countryCode"])
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"name":   "Spotify",
+			"domain": "spotify.com",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient("test_client_id", "test_api_key")
+	client.baseURL = server.URL
+
+	brand, err := client.CreateTransaction(context.Background(), "SPOTIFY USA", "US")
+	if err != nil {
+		t.Fatalf("CreateTransaction() error = %v", err)
+	}
+	if brand.Name != "Spotify" {
+		t.Errorf("brand.Name = %v, want Spotify", brand.Name)
 	}
 }

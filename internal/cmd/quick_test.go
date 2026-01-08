@@ -373,6 +373,236 @@ func TestQuickCmd_Download(t *testing.T) {
 	}
 }
 
+func TestQuickCmd_Download_SHA256(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Stripe",
+				Domain: "stripe.com",
+				Logos: []api.Logo{
+					{
+						Type:  "logo",
+						Theme: "light",
+						Formats: []api.LogoFormat{
+							{Src: "https://asset.brandfetch.io/stripe/logo-light.svg", Format: "svg"},
+						},
+					},
+					{
+						Type:  "logo",
+						Theme: "dark",
+						Formats: []api.LogoFormat{
+							{Src: "https://asset.brandfetch.io/stripe/logo-dark.svg", Format: "svg"},
+						},
+					},
+					{
+						Type:  "icon",
+						Theme: "dark",
+						Formats: []api.LogoFormat{
+							{Src: "https://asset.brandfetch.io/stripe/favicon.png", Format: "png"},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	mockHTTP := &MockHTTPClient{
+		GetFunc: func(url string) (*http.Response, error) {
+			var content string
+			switch {
+			case strings.Contains(url, "logo-light"):
+				content = "<svg>light logo</svg>"
+			case strings.Contains(url, "logo-dark"):
+				content = "<svg>dark logo</svg>"
+			case strings.Contains(url, "favicon"):
+				content = "fake png data"
+			default:
+				return nil, errors.New("unexpected URL")
+			}
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader(content)),
+			}, nil
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	outputFormat = "text"
+	downloadDir = tempDir
+	quickSHA256 = true
+	quickSHA256Manifest = ""
+	defer func() {
+		downloadDir = ""
+		quickSHA256 = false
+		quickSHA256Manifest = ""
+	}()
+
+	cmd := newQuickCmdWithClients(mock, mockHTTP)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"stripe.com", "--download", tempDir, "--sha256"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	files := []string{"logo-light.svg", "logo-dark.svg", "favicon.png"}
+	for _, f := range files {
+		path := filepath.Join(tempDir, f)
+		if _, err := os.Stat(path + ".sha256"); os.IsNotExist(err) {
+			t.Errorf("expected checksum file for %s", path)
+			continue
+		}
+		sum, err := computeSHA256(path)
+		if err != nil {
+			t.Fatalf("computeSHA256() error = %v", err)
+		}
+		data, err := os.ReadFile(path + ".sha256")
+		if err != nil {
+			t.Fatalf("failed to read checksum file: %v", err)
+		}
+		if !strings.Contains(string(data), sum) {
+			t.Errorf("checksum file missing hash for %s", path)
+		}
+	}
+}
+
+func TestQuickCmd_Download_SHA256Manifest(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Stripe",
+				Domain: "stripe.com",
+				Logos: []api.Logo{
+					{
+						Type:  "logo",
+						Theme: "light",
+						Formats: []api.LogoFormat{
+							{Src: "https://asset.brandfetch.io/stripe/logo-light.svg", Format: "svg"},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	mockHTTP := &MockHTTPClient{
+		GetFunc: func(url string) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<svg>light logo</svg>")),
+			}, nil
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	outputFormat = "text"
+	downloadDir = tempDir
+	manifestPath := filepath.Join(tempDir, "checksums.sha256")
+	quickSHA256Manifest = manifestPath
+	quickSHA256ManifestOut = ""
+	defer func() {
+		downloadDir = ""
+		quickSHA256Manifest = ""
+		quickSHA256ManifestOut = ""
+	}()
+
+	cmd := newQuickCmdWithClients(mock, mockHTTP)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"stripe.com", "--download", tempDir, "--sha256-manifest", manifestPath})
+
+	// write manifest after download, but we need it before verification; precompute expected
+	sum := "db349b677a1eeaf813d92017e8221a2b39677880af3a8c4d9a12c2ed731531dd"
+	manifest := sum + "  logo-light.svg\n"
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if containsStr(stderr.String(), "checksum verification failed") {
+		t.Errorf("unexpected checksum failure: %s", stderr.String())
+	}
+}
+
+func TestQuickCmd_Download_SHA256ManifestAppend(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockAPIClient{
+		GetBrandFunc: func(ctx context.Context, domain string) (*api.Brand, error) {
+			return &api.Brand{
+				Name:   "Stripe",
+				Domain: "stripe.com",
+				Logos: []api.Logo{
+					{
+						Type:  "logo",
+						Theme: "light",
+						Formats: []api.LogoFormat{
+							{Src: "https://asset.brandfetch.io/stripe/logo-light.svg", Format: "svg"},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	mockHTTP := &MockHTTPClient{
+		GetFunc: func(url string) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader("<svg>light logo</svg>")),
+			}, nil
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	outputFormat = "text"
+	downloadDir = tempDir
+	manifestPath := filepath.Join(tempDir, "checksums.sha256")
+	quickSHA256ManifestOut = manifestPath
+	quickSHA256ManifestAppend = true
+	defer func() {
+		downloadDir = ""
+		quickSHA256ManifestOut = ""
+		quickSHA256ManifestAppend = false
+	}()
+
+	existing := "deadbeef  other.svg\n"
+	if err := os.WriteFile(manifestPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("failed to seed manifest: %v", err)
+	}
+
+	cmd := newQuickCmdWithClients(mock, mockHTTP)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"stripe.com", "--download", tempDir, "--sha256-manifest-out", manifestPath, "--sha256-manifest-append"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("failed to read manifest: %v", err)
+	}
+	if !strings.Contains(string(data), "other.svg") {
+		t.Errorf("expected existing entry to remain")
+	}
+	if !strings.Contains(string(data), "logo-light.svg") {
+		t.Errorf("expected new entry to be appended")
+	}
+}
+
 func TestQuickCmd_Download_CreateDir(t *testing.T) {
 	// Use a nested directory that doesn't exist
 	tempDir := t.TempDir()
@@ -541,9 +771,9 @@ func TestQuickCmd_Download_HTTPError(t *testing.T) {
 
 func TestQuickCmd_Download_FaviconExtensions(t *testing.T) {
 	tests := []struct {
-		name        string
-		faviconURL  string
-		wantExt     string
+		name       string
+		faviconURL string
+		wantExt    string
 	}{
 		{"jpeg extension", "https://example.com/favicon.jpeg", "favicon.jpeg"},
 		{"jpg extension", "https://example.com/icon.jpg", "favicon.jpg"},

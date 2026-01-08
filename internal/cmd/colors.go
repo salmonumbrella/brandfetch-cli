@@ -12,16 +12,16 @@ import (
 // NewColorsCmd creates the colors command.
 func NewColorsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "colors <domain>",
-		Short: "Get color palette for a domain",
-		Long: `Fetch the brand color palette for a domain.
+		Use:   "colors <identifier>",
+		Short: "Get color palette for an identifier",
+		Long: `Fetch the brand color palette for an identifier.
 
 Examples:
   brandfetch colors netflix.com
   brandfetch colors stripe.com --output json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := createClient()
+			client, err := createClient(clientRequirements{requireAPIKey: true})
 			if err != nil {
 				return err
 			}
@@ -32,7 +32,7 @@ Examples:
 
 func newColorsCmdWithClient(client APIClient) *cobra.Command {
 	return &cobra.Command{
-		Use:  "colors <domain>",
+		Use:  "colors <identifier>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runColorsCmd(cmd, args, client)
@@ -52,7 +52,10 @@ func runColorsCmd(cmd *cobra.Command, args []string, client APIClient) error {
 		return err
 	}
 
-	format, _ := output.ParseFormat(outputFormat)
+	format, colorize, err := resolveOutput(cmd)
+	if err != nil {
+		return err
+	}
 
 	var colors []output.ColorInfo
 	for _, c := range brand.Colors {
@@ -63,6 +66,6 @@ func runColorsCmd(cmd *cobra.Command, args []string, client APIClient) error {
 		})
 	}
 
-	fmt.Fprint(cmd.OutOrStdout(), output.FormatColors(colors, format))
+	fmt.Fprint(cmd.OutOrStdout(), output.FormatColors(colors, format, colorize))
 	return nil
 }

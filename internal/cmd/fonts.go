@@ -12,16 +12,16 @@ import (
 // NewFontsCmd creates the fonts command.
 func NewFontsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "fonts <domain>",
-		Short: "Get fonts for a domain",
-		Long: `Fetch the brand fonts for a domain.
+		Use:   "fonts <identifier>",
+		Short: "Get fonts for an identifier",
+		Long: `Fetch the brand fonts for an identifier.
 
 Examples:
   brandfetch fonts github.com
   brandfetch fonts apple.com --output json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := createClient()
+			client, err := createClient(clientRequirements{requireAPIKey: true})
 			if err != nil {
 				return err
 			}
@@ -32,7 +32,7 @@ Examples:
 
 func newFontsCmdWithClient(client APIClient) *cobra.Command {
 	return &cobra.Command{
-		Use:  "fonts <domain>",
+		Use:  "fonts <identifier>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFontsCmd(cmd, args, client)
@@ -52,7 +52,10 @@ func runFontsCmd(cmd *cobra.Command, args []string, client APIClient) error {
 		return err
 	}
 
-	format, _ := output.ParseFormat(outputFormat)
+	format, colorize, err := resolveOutput(cmd)
+	if err != nil {
+		return err
+	}
 
 	var fonts []output.FontInfo
 	for _, f := range brand.Fonts {
@@ -62,6 +65,6 @@ func runFontsCmd(cmd *cobra.Command, args []string, client APIClient) error {
 		})
 	}
 
-	fmt.Fprint(cmd.OutOrStdout(), output.FormatFonts(fonts, format))
+	fmt.Fprint(cmd.OutOrStdout(), output.FormatFonts(fonts, format, colorize))
 	return nil
 }

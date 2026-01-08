@@ -7,39 +7,35 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/salmonumbrella/brandfetch-cli/internal/api"
-	"github.com/salmonumbrella/brandfetch-cli/internal/config"
 	"github.com/salmonumbrella/brandfetch-cli/internal/output"
-	"github.com/salmonumbrella/brandfetch-cli/internal/secrets"
 )
 
 var (
-	logoFormat string
-	logoTheme  string
+	logoFormat   string
+	logoTheme    string
+	logoType     string
+	logoFallback string
+	logoWidth    int
+	logoHeight   int
 )
-
-// APIClient interface for dependency injection in tests.
-type APIClient interface {
-	GetLogo(ctx context.Context, domain, format, theme string) (*api.LogoResult, error)
-	GetBrand(ctx context.Context, domain string) (*api.Brand, error)
-	Search(ctx context.Context, query string, limit int) ([]api.SearchResult, error)
-}
 
 // NewLogoCmd creates the logo command.
 func NewLogoCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "logo <domain>",
-		Short: "Get logo URL for a domain (uses high-quota Logo API)",
-		Long: `Fetch the logo URL for a brand by domain name.
+		Use:   "logo <identifier>",
+		Short: "Get logo URL for an identifier (uses high-quota Logo API)",
+		Long: `Fetch the logo URL for a brand identifier (domain, brand ID, ticker, or ISIN).
 
 This command uses the Logo API which has high quota limits.
 
 Examples:
   brandfetch logo github.com
   brandfetch logo github.com --format png
-  brandfetch logo github.com --theme dark`,
+  brandfetch logo github.com --theme dark
+  brandfetch logo id_123 --type icon --format png`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := createClient()
+			client, err := createClient(clientRequirements{requireClientID: true})
 			if err != nil {
 				return err
 			}
@@ -47,8 +43,8 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVar(&logoFormat, "format", "svg", "Logo format: svg, png")
-	cmd.Flags().StringVar(&logoTheme, "theme", "light", "Logo theme: light, dark")
+	addLogoFlags(cmd)
+	cmd.AddCommand(newLogoDownloadCmd())
 
 	return cmd
 }
@@ -56,34 +52,49 @@ Examples:
 // newLogoCmdWithClient creates logo command with injected client (for testing).
 func newLogoCmdWithClient(client APIClient) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:  "logo <domain>",
+		Use:  "logo <identifier>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runLogoCmd(cmd, args, client)
 		},
 	}
-	cmd.Flags().StringVar(&logoFormat, "format", "svg", "Logo format")
-	cmd.Flags().StringVar(&logoTheme, "theme", "light", "Logo theme")
+	addLogoFlags(cmd)
 	return cmd
 }
 
 func runLogoCmd(cmd *cobra.Command, args []string, client APIClient) error {
-	domain := args[0]
+	identifier := args[0]
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	result, err := client.GetLogo(ctx, domain, logoFormat, logoTheme)
+	result, err := client.GetLogo(ctx, api.LogoOptions{
+		Identifier: identifier,
+		Format:     logoFormat,
+		Theme:      logoTheme,
+		Type:       logoType,
+		Fallback:   logoFallback,
+		Width:      logoWidth,
+		Height:     logoHeight,
+	})
 	if err != nil {
 		return err
 	}
 
-	format, _ := output.ParseFormat(outputFormat)
+	format, _, err := resolveOutput(cmd)
+	if err != nil {
+		return err
+	}
 	logoResult := &output.LogoResult{
-		URL:    result.URL,
-		Format: result.Format,
-		Theme:  result.Theme,
+		URL:        result.URL,
+		Identifier: result.Identifier,
+		Format:     result.Format,
+		Theme:      result.Theme,
+		Type:       result.Type,
+		Fallback:   result.Fallback,
+		Width:      result.Width,
+		Height:     result.Height,
 	}
 
 	fmt.Fprint(cmd.OutOrStdout(), output.FormatLogo(logoResult, format))
@@ -93,19 +104,11 @@ func runLogoCmd(cmd *cobra.Command, args []string, client APIClient) error {
 	return nil
 }
 
-func createClient() (*api.Client, error) {
-	// Try to get credentials
-	var keychain config.KeychainGetter
-	store, err := secrets.NewStore()
-	if err == nil {
-		keychain = store
-	}
-
-	configPath, _ := config.ConfigFilePath()
-	creds, err := config.LoadCredentials(keychain, configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return api.NewClient(creds.ClientID, creds.APIKey), nil
+func addLogoFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&logoFormat, "format", "svg", "Logo format: svg, png, webp")
+	cmd.Flags().StringVar(&logoTheme, "theme", "light", "Logo theme: light, dark")
+	cmd.Flags().StringVar(&logoType, "type", "logo", "Logo type: logo, icon, symbol")
+	cmd.Flags().StringVar(&logoFallback, "fallback", "", "Fallback: lettermark, icon, symbol, brandfetch, 404")
+	cmd.Flags().IntVar(&logoWidth, "width", 0, "Logo width (px)")
+	cmd.Flags().IntVar(&logoHeight, "height", 0, "Logo height (px)")
 }

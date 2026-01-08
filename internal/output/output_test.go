@@ -132,7 +132,7 @@ func TestFormatBrand_Text(t *testing.T) {
 		},
 	}
 
-	result := FormatBrand(brand, FormatText)
+	result := FormatBrand(brand, FormatText, false)
 
 	// Check essential parts are present
 	if !strings.Contains(result, "GitHub") {
@@ -164,7 +164,7 @@ func TestFormatBrand_Text_Empty(t *testing.T) {
 		Domain: "minimal.com",
 	}
 
-	result := FormatBrand(brand, FormatText)
+	result := FormatBrand(brand, FormatText, false)
 
 	if !strings.Contains(result, "MinimalBrand") {
 		t.Errorf("FormatBrand() text missing name")
@@ -200,7 +200,7 @@ func TestFormatBrand_JSON(t *testing.T) {
 		},
 	}
 
-	result := FormatBrand(brand, FormatJSON)
+	result := FormatBrand(brand, FormatJSON, false)
 
 	var parsed BrandResult
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
@@ -231,7 +231,7 @@ func TestFormatBrand_JSON_SpecialCharacters(t *testing.T) {
 		Description: "Line 1\nLine 2\tTabbed",
 	}
 
-	result := FormatBrand(brand, FormatJSON)
+	result := FormatBrand(brand, FormatJSON, false)
 
 	var parsed BrandResult
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
@@ -250,7 +250,7 @@ func TestFormatSearch_Text(t *testing.T) {
 		{Name: "Bitbucket", Domain: "bitbucket.org"},
 	}
 
-	result := FormatSearch(results, FormatText)
+	result := FormatSearch(results, FormatText, false)
 
 	if !strings.Contains(result, "GitHub") {
 		t.Errorf("FormatSearch() text missing first result name")
@@ -275,7 +275,7 @@ func TestFormatSearch_Text(t *testing.T) {
 func TestFormatSearch_Text_Empty(t *testing.T) {
 	results := []SearchResult{}
 
-	result := FormatSearch(results, FormatText)
+	result := FormatSearch(results, FormatText, false)
 
 	if result != "" {
 		t.Errorf("FormatSearch() text for empty results = %q, want empty string", result)
@@ -288,7 +288,7 @@ func TestFormatSearch_JSON(t *testing.T) {
 		{Name: "GitLab", Domain: "gitlab.com"},
 	}
 
-	result := FormatSearch(results, FormatJSON)
+	result := FormatSearch(results, FormatJSON, false)
 
 	var parsed []SearchResult
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
@@ -309,7 +309,7 @@ func TestFormatSearch_JSON(t *testing.T) {
 func TestFormatSearch_JSON_Empty(t *testing.T) {
 	results := []SearchResult{}
 
-	result := FormatSearch(results, FormatJSON)
+	result := FormatSearch(results, FormatJSON, false)
 
 	var parsed []SearchResult
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
@@ -328,7 +328,7 @@ func TestFormatColors_Text(t *testing.T) {
 		{Hex: "#0000ff", Type: "accent", Brightness: 40},
 	}
 
-	result := FormatColors(colors, FormatText)
+	result := FormatColors(colors, FormatText, false)
 
 	if !strings.Contains(result, "#ff0000 (primary)") {
 		t.Errorf("FormatColors() text missing first color")
@@ -349,7 +349,7 @@ func TestFormatColors_Text(t *testing.T) {
 func TestFormatColors_Text_Empty(t *testing.T) {
 	colors := []ColorInfo{}
 
-	result := FormatColors(colors, FormatText)
+	result := FormatColors(colors, FormatText, false)
 
 	if result != "" {
 		t.Errorf("FormatColors() text for empty colors = %q, want empty string", result)
@@ -362,7 +362,7 @@ func TestFormatColors_JSON(t *testing.T) {
 		{Hex: "#00ff00", Type: "secondary", Brightness: 75},
 	}
 
-	result := FormatColors(colors, FormatJSON)
+	result := FormatColors(colors, FormatJSON, false)
 
 	var parsed []ColorInfo
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
@@ -390,7 +390,7 @@ func TestFormatFonts_Text(t *testing.T) {
 		{Name: "Monaco", Type: "monospace"},
 	}
 
-	result := FormatFonts(fonts, FormatText)
+	result := FormatFonts(fonts, FormatText, false)
 
 	if !strings.Contains(result, "Inter (body)") {
 		t.Errorf("FormatFonts() text missing first font")
@@ -411,7 +411,7 @@ func TestFormatFonts_Text(t *testing.T) {
 func TestFormatFonts_Text_Empty(t *testing.T) {
 	fonts := []FontInfo{}
 
-	result := FormatFonts(fonts, FormatText)
+	result := FormatFonts(fonts, FormatText, false)
 
 	if result != "" {
 		t.Errorf("FormatFonts() text for empty fonts = %q, want empty string", result)
@@ -424,7 +424,7 @@ func TestFormatFonts_JSON(t *testing.T) {
 		{Name: "Helvetica", Type: "heading"},
 	}
 
-	result := FormatFonts(fonts, FormatJSON)
+	result := FormatFonts(fonts, FormatJSON, false)
 
 	var parsed []FontInfo
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
@@ -451,7 +451,7 @@ func TestFormatFonts_Text_SpecialCharacters(t *testing.T) {
 		{Name: "Font & Symbols <test>", Type: "test"},
 	}
 
-	result := FormatFonts(fonts, FormatText)
+	result := FormatFonts(fonts, FormatText, false)
 
 	if !strings.Contains(result, "Font \"With\" Quotes (special)") {
 		t.Errorf("FormatFonts() text not handling special characters in name")
@@ -875,7 +875,7 @@ func TestFormatQuickBatch_SingleResult(t *testing.T) {
 	}
 
 	// Single result should use original format (not array for JSON)
-	output := FormatQuickBatch(results, FormatJSON)
+	output := FormatQuickBatch(results, FormatJSON, false)
 	if strings.HasPrefix(output, "[") {
 		t.Errorf("single result should not be an array: %s", output)
 	}
@@ -895,7 +895,7 @@ func TestFormatQuickBatch_MultipleResults_JSON(t *testing.T) {
 		{Name: "GitHub", Domain: "github.com", Colors: []ColorInfo{{Hex: "#24292f", Type: "dark"}}},
 	}
 
-	output := FormatQuickBatch(results, FormatJSON)
+	output := FormatQuickBatch(results, FormatJSON, false)
 
 	var parsed []QuickResult
 	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
@@ -919,7 +919,7 @@ func TestFormatQuickBatch_MultipleResults_Text(t *testing.T) {
 		{Name: "GitHub", Domain: "github.com"},
 	}
 
-	output := FormatQuickBatch(results, FormatText)
+	output := FormatQuickBatch(results, FormatText, false)
 
 	if !strings.Contains(output, "Stripe") {
 		t.Errorf("output should contain Stripe")
@@ -937,7 +937,7 @@ func TestFormatQuickBatch_MultipleResults_Text(t *testing.T) {
 func TestFormatQuickBatch_Empty(t *testing.T) {
 	var results []*QuickResult
 
-	output := FormatQuickBatch(results, FormatText)
+	output := FormatQuickBatch(results, FormatText, false)
 	if output != "" {
 		t.Errorf("empty results should return empty string")
 	}
