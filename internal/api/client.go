@@ -12,27 +12,30 @@ import (
 )
 
 const (
-	defaultBaseURL     = "https://api.brandfetch.io"
-	defaultLogoBaseURL = "https://cdn.brandfetch.io"
-	defaultTimeout     = 30 * time.Second
+	defaultBaseURL        = "https://api.brandfetch.io"
+	defaultLogoBaseURL    = "https://cdn.brandfetch.io"
+	defaultGraphQLBaseURL = "https://graphql.brandfetch.io/"
+	defaultTimeout        = 30 * time.Second
 )
 
 // Client is the Brandfetch API client.
 type Client struct {
-	clientID    string // Logo API key (high quota)
-	apiKey      string // Brand API key (limited quota)
-	baseURL     string
-	logoBaseURL string
-	httpClient  *http.Client
+	clientID       string // Logo API key (high quota)
+	apiKey         string // Brand API key (limited quota)
+	baseURL        string
+	logoBaseURL    string
+	graphQLBaseURL string
+	httpClient     *http.Client
 }
 
 // NewClient creates a new Brandfetch API client.
 func NewClient(clientID, apiKey string) *Client {
 	return &Client{
-		clientID:    clientID,
-		apiKey:      apiKey,
-		baseURL:     defaultBaseURL,
-		logoBaseURL: defaultLogoBaseURL,
+		clientID:       clientID,
+		apiKey:         apiKey,
+		baseURL:        defaultBaseURL,
+		logoBaseURL:    defaultLogoBaseURL,
+		graphQLBaseURL: defaultGraphQLBaseURL,
 		httpClient: &http.Client{
 			Timeout: defaultTimeout,
 		},
@@ -385,7 +388,7 @@ func (c *Client) GraphQL(ctx context.Context, query string, variables map[string
 		return nil, fmt.Errorf("failed to encode request: %w", err)
 	}
 
-	u := "https://graphql.brandfetch.io/"
+	u := c.graphQLBaseURL
 	req, err := http.NewRequestWithContext(ctx, "POST", u, strings.NewReader(string(bodyBytes)))
 	if err != nil {
 		return nil, err
@@ -424,7 +427,7 @@ func (c *Client) GraphQL(ctx context.Context, query string, variables map[string
 
 // GraphQLRaw executes a GraphQL request using a raw JSON body stream.
 func (c *Client) GraphQLRaw(ctx context.Context, body io.Reader) (json.RawMessage, error) {
-	u := "https://graphql.brandfetch.io/"
+	u := c.graphQLBaseURL
 	req, err := http.NewRequestWithContext(ctx, "POST", u, body)
 	if err != nil {
 		return nil, err
