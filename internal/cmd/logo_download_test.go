@@ -50,6 +50,37 @@ func TestLogoDownloadCmd_Text(t *testing.T) {
 	}
 }
 
+func TestSanitizeFileName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"simple domain", "github.com", "github.com"},
+		{"with spaces", "my brand", "my-brand"},
+		{"with slashes", "foo/bar", "bar"},
+		{"with backslashes on unix", "foo\\bar", "foo\\bar"}, // backslash is valid in Unix filenames
+		{"with colons", "foo:bar", "foo-bar"},
+		{"double dots in name", "foo..bar", "foo..bar"}, // consecutive dots in filename are safe
+		{"path traversal attempt", "../../../etc/passwd", "passwd"},
+		{"quadruple dots", "....", "...."},      // four dots is a valid filename
+		{"empty string", "", "logo"},            // empty becomes default
+		{"only double dots", "..", "logo"},      // parent dir reference becomes default
+		{"single dot", ".", "logo"},             // current dir reference becomes default
+		{"complex traversal", "foo/../bar", "bar"},
+		{"deeply nested traversal", "a/b/c/../../../etc/passwd", "passwd"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeFileName(tt.input)
+			if result != tt.expected {
+				t.Errorf("sanitizeFileName(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestLogoDownloadCmd_SHA256(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "logo-bytes")

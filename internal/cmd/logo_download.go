@@ -140,13 +140,19 @@ func runLogoDownloadCmd(cmd *cobra.Command, args []string, client APIClient, htt
 
 func sanitizeFileName(value string) string {
 	safe := strings.TrimSpace(value)
-	safe = strings.ReplaceAll(safe, " ", "-")
-	safe = strings.ReplaceAll(safe, "/", "-")
-	safe = strings.ReplaceAll(safe, "\\", "-")
-	safe = strings.ReplaceAll(safe, ":", "-")
-	safe = strings.ReplaceAll(safe, "..", ".")
-	if safe == "" {
+
+	// Use filepath.Base first to extract just the filename component
+	// This prevents path traversal attacks like "../../../etc/passwd"
+	safe = filepath.Base(safe)
+
+	// If Base returns "." or ".." or empty, use default
+	if safe == "" || safe == "." || safe == ".." {
 		return "logo"
 	}
+
+	// Now sanitize the remaining characters for safe filename usage
+	safe = strings.ReplaceAll(safe, " ", "-")
+	safe = strings.ReplaceAll(safe, ":", "-")
+
 	return safe
 }
