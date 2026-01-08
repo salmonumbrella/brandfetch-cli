@@ -81,6 +81,55 @@ func TestSanitizeFileName(t *testing.T) {
 	}
 }
 
+func TestLogoDownloadCmd_BrowserHeaders(t *testing.T) {
+	var receivedHeaders http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHeaders = r.Header
+		_, _ = io.WriteString(w, "logo-bytes")
+	}))
+	defer server.Close()
+
+	mock := &MockAPIClient{
+		GetLogoFunc: func(ctx context.Context, opts api.LogoOptions) (*api.LogoResult, error) {
+			return &api.LogoResult{URL: server.URL + "/logo.svg"}, nil
+		},
+	}
+
+	tempDir := t.TempDir()
+	outPath := filepath.Join(tempDir, "logo.svg")
+
+	var stdout bytes.Buffer
+	cmd := newLogoDownloadCmdWithClients(mock, server.Client())
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"github.com", "--path", outPath})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	// Verify browser headers are set
+	userAgent := receivedHeaders.Get("User-Agent")
+	if userAgent == "" {
+		t.Error("User-Agent header not set")
+	}
+	if !containsStr(userAgent, "Mozilla") {
+		t.Errorf("User-Agent does not look like a browser: %s", userAgent)
+	}
+
+	accept := receivedHeaders.Get("Accept")
+	if accept == "" {
+		t.Error("Accept header not set")
+	}
+	if !containsStr(accept, "image") {
+		t.Errorf("Accept header does not include image types: %s", accept)
+	}
+
+	acceptLang := receivedHeaders.Get("Accept-Language")
+	if acceptLang == "" {
+		t.Error("Accept-Language header not set")
+	}
+}
+
 func TestLogoDownloadCmd_SHA256(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "logo-bytes")

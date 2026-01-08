@@ -28,6 +28,7 @@ var quickSHA256ManifestVerify bool
 // HTTPClient interface for downloading files (allows mocking in tests).
 type HTTPClient interface {
 	Get(url string) (*http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // NewQuickCmd creates the quick command.
@@ -289,8 +290,19 @@ func writeSHA256File(path string) error {
 }
 
 // downloadFile downloads a file from url and saves it to destPath.
+// It sets browser headers to avoid CDN blocks (e.g., CloudFront 403 errors).
 func downloadFile(httpClient HTTPClient, fileURL, destPath string) error {
-	resp, err := httpClient.Get(fileURL)
+	req, err := http.NewRequest(http.MethodGet, fileURL, nil)
+	if err != nil {
+		return err
+	}
+
+	// Set browser headers to avoid CDN blocks
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "image/svg+xml,image/webp,image/apng,image/*,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

@@ -18,10 +18,19 @@ import (
 // MockHTTPClient for testing downloads.
 type MockHTTPClient struct {
 	GetFunc func(url string) (*http.Response, error)
+	DoFunc  func(req *http.Request) (*http.Response, error)
 }
 
 func (m *MockHTTPClient) Get(url string) (*http.Response, error) {
 	return m.GetFunc(url)
+}
+
+func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	if m.DoFunc != nil {
+		return m.DoFunc(req)
+	}
+	// Fall back to GetFunc for backwards compatibility with existing tests
+	return m.GetFunc(req.URL.String())
 }
 
 func TestQuickCmd_Text(t *testing.T) {
