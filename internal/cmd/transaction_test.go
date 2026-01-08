@@ -9,7 +9,12 @@ import (
 	"github.com/salmonumbrella/brandfetch-cli/internal/api"
 )
 
+func resetTransactionFlags() {
+	transactionCountry = ""
+}
+
 func TestTransactionCmd_JSON(t *testing.T) {
+	resetTransactionFlags()
 	mock := &MockAPIClient{
 		CreateTransactionFunc: func(ctx context.Context, label, countryCode string) (*api.Brand, error) {
 			if label != "SPOTIFY USA" {

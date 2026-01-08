@@ -11,9 +11,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestWebhooksCreate_Text(t *testing.T) {
+func resetWebhookFlags() {
+	webhookURL = ""
+	webhookDescription = ""
+	webhookEnabled = true
+	webhookEvents = nil
+	webhookURN = ""
+	webhookSubscriptions = nil
+	webhooksListEnabled = false
+	webhooksListDisabled = false
+	webhooksListEvents = nil
+	webhooksListURL = ""
 	webhooksListJSONFlat = false
 	webhooksListTable = false
+	webhooksListTableTruncate = 0
+	webhooksListTableColumns = nil
+}
+
+func TestWebhooksCreate_Text(t *testing.T) {
+	resetWebhookFlags()
 	webhookURL = "https://example.com/webhooks"
 	webhookEvents = []string{"brand.updated"}
 	webhookDescription = "Test webhook"
@@ -51,12 +67,7 @@ func TestWebhooksCreate_Text(t *testing.T) {
 }
 
 func TestWebhooksList_Text(t *testing.T) {
-	webhooksListEnabled = false
-	webhooksListDisabled = false
-	webhooksListEvents = nil
-	webhooksListURL = ""
-	webhooksListJSONFlat = false
-	webhooksListTable = false
+	resetWebhookFlags()
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -83,10 +94,9 @@ func TestWebhooksList_Text(t *testing.T) {
 }
 
 func TestWebhooksList_Filter(t *testing.T) {
+	resetWebhookFlags()
 	webhooksListEnabled = true
-	webhooksListDisabled = false
 	webhooksListEvents = []string{"brand.updated"}
-	webhooksListURL = ""
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -117,12 +127,8 @@ func TestWebhooksList_Filter(t *testing.T) {
 }
 
 func TestWebhooksList_FilterURL(t *testing.T) {
-	webhooksListEnabled = false
-	webhooksListDisabled = false
-	webhooksListEvents = nil
+	resetWebhookFlags()
 	webhooksListURL = "match"
-	webhooksListJSONFlat = false
-	webhooksListTable = false
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -153,12 +159,8 @@ func TestWebhooksList_FilterURL(t *testing.T) {
 }
 
 func TestWebhooksList_JSONFlat(t *testing.T) {
-	webhooksListEnabled = false
-	webhooksListDisabled = false
-	webhooksListEvents = nil
-	webhooksListURL = ""
+	resetWebhookFlags()
 	webhooksListJSONFlat = true
-	webhooksListTable = false
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -189,13 +191,8 @@ func TestWebhooksList_JSONFlat(t *testing.T) {
 }
 
 func TestWebhooksList_Table(t *testing.T) {
-	webhooksListEnabled = false
-	webhooksListDisabled = false
-	webhooksListEvents = nil
-	webhooksListURL = ""
-	webhooksListJSONFlat = false
+	resetWebhookFlags()
 	webhooksListTable = true
-	webhooksListTableTruncate = 0
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -223,11 +220,7 @@ func TestWebhooksList_Table(t *testing.T) {
 }
 
 func TestWebhooksList_Table_Truncate(t *testing.T) {
-	webhooksListEnabled = false
-	webhooksListDisabled = false
-	webhooksListEvents = nil
-	webhooksListURL = ""
-	webhooksListJSONFlat = false
+	resetWebhookFlags()
 	webhooksListTable = true
 	webhooksListTableTruncate = 10
 
