@@ -245,3 +245,45 @@ func TestWebhooksList_Table_Truncate(t *testing.T) {
 		t.Errorf("expected truncated output")
 	}
 }
+
+func TestWebhooksCreate_InvalidURL(t *testing.T) {
+	resetWebhookFlags()
+	webhookURL = "not-a-valid-url"
+	webhookEvents = []string{"brand.updated"}
+
+	var stdout bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&stdout)
+
+	mock := &MockAPIClient{}
+
+	outputFormat = "text"
+	err := runWebhooksCreateCmd(cmd, mock)
+	if err == nil {
+		t.Fatal("expected error for invalid URL")
+	}
+	if !strings.Contains(err.Error(), "invalid URL") {
+		t.Errorf("error should mention invalid URL: %v", err)
+	}
+}
+
+func TestWebhooksCreate_InvalidURLScheme(t *testing.T) {
+	resetWebhookFlags()
+	webhookURL = "ftp://example.com/webhooks"
+	webhookEvents = []string{"brand.updated"}
+
+	var stdout bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&stdout)
+
+	mock := &MockAPIClient{}
+
+	outputFormat = "text"
+	err := runWebhooksCreateCmd(cmd, mock)
+	if err == nil {
+		t.Fatal("expected error for invalid URL scheme")
+	}
+	if !strings.Contains(err.Error(), "http") {
+		t.Errorf("error should mention http/https: %v", err)
+	}
+}

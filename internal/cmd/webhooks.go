@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -241,6 +242,15 @@ func runWebhooksCreateCmd(cmd *cobra.Command, client APIClient) error {
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
+	}
+
+	// Validate webhook URL
+	parsedURL, err := url.Parse(webhookURL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return fmt.Errorf("invalid URL: %s (must be a valid HTTP/HTTPS URL)", webhookURL)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: %s (must be http or https)", parsedURL.Scheme)
 	}
 
 	input := map[string]interface{}{
