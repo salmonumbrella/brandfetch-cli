@@ -263,21 +263,6 @@ func printGraphQLText(cmd *cobra.Command, data json.RawMessage, colorize bool) (
 		return true, nil
 	}
 
-	if logosRaw, ok := root["logos"]; ok {
-		var logos []output.LogoInfo
-		if err := json.Unmarshal(logosRaw, &logos); err == nil {
-			fmt.Fprint(cmd.OutOrStdout(), formatLogosText(logos))
-			return true, nil
-		}
-	}
-	if linksRaw, ok := root["links"]; ok {
-		var links []output.LinkInfo
-		if err := json.Unmarshal(linksRaw, &links); err == nil {
-			fmt.Fprint(cmd.OutOrStdout(), formatLinksText(links))
-			return true, nil
-		}
-	}
-
 	handled := false
 	if colorsRaw, ok := root["colors"]; ok {
 		var colors []output.ColorInfo
