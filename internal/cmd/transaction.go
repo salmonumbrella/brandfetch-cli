@@ -49,6 +49,10 @@ func newTransactionCmdWithClient(client APIClient) *cobra.Command {
 }
 
 func runTransactionCmd(cmd *cobra.Command, args []string, client APIClient) error {
+	if transactionCountry == "" {
+		return fmt.Errorf("--country is required (ISO 3166-1 alpha-2 country code, e.g., US, GB, DE)")
+	}
+
 	label := args[0]
 	ctx := cmd.Context()
 	if ctx == nil {
