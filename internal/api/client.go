@@ -409,14 +409,14 @@ func (c *Client) GraphQL(ctx context.Context, query string, variables map[string
 	}
 
 	var envelope struct {
-		Data   json.RawMessage  `json:"data"`
-		Errors []map[string]any `json:"errors"`
+		Data   json.RawMessage          `json:"data"`
+		Errors []map[string]interface{} `json:"errors"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(envelope.Errors) > 0 {
-		return nil, fmt.Errorf("graphql error: %v", envelope.Errors)
+		return nil, NewGraphQLError(envelope.Errors)
 	}
 
 	return envelope.Data, nil
@@ -448,14 +448,14 @@ func (c *Client) GraphQLRaw(ctx context.Context, body io.Reader) (json.RawMessag
 	}
 
 	var envelope struct {
-		Data   json.RawMessage  `json:"data"`
-		Errors []map[string]any `json:"errors"`
+		Data   json.RawMessage          `json:"data"`
+		Errors []map[string]interface{} `json:"errors"`
 	}
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(envelope.Errors) > 0 {
-		return nil, fmt.Errorf("graphql error: %v", envelope.Errors)
+		return nil, NewGraphQLError(envelope.Errors)
 	}
 
 	return envelope.Data, nil
