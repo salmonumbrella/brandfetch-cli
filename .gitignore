@@ -1,0 +1,30 @@
+# Build artifacts
+bin/
+/brandfetch
+*.exe
+coverage.out
+
+# Tools
+.tools/
+
+# IDE & AI
+.cursor/
+.idea/
+.vscode/
+.claude/
+.specstory/
+CLAUDE.md
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Agent artifacts
+.dm/
+.private-journal/
+
+# Documentation (plans/drafts)
+docs/

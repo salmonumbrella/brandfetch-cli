@@ -1,0 +1,87 @@
+version: 2
+
+project_name: brandfetch
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: brandfetch-darwin
+    main: ./cmd/brandfetch
+    binary: brandfetch
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Version={{.Version}}
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Commit={{.ShortCommit}}
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Date={{.Date}}
+
+  - id: brandfetch-other
+    main: ./cmd/brandfetch
+    binary: brandfetch
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Version={{.Version}}
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Commit={{.ShortCommit}}
+      - -X github.com/salmonumbrella/brandfetch-cli/internal/cmd.Date={{.Date}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+
+brews:
+  - name: brandfetch-cli
+    repository:
+      owner: salmonumbrella
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/salmonumbrella/brandfetch-cli"
+    description: "CLI for Brandfetch to fetch logos, colors, and brand assets"
+    license: "MIT"
+    install: |
+      bin.install "brandfetch"
+    test: |
+      system "#{bin}/brandfetch", "--help"
+
+release:
+  github:
+    owner: salmonumbrella
+    name: brandfetch-cli
+  draft: false
+  prerelease: auto
+

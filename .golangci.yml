@@ -1,0 +1,35 @@
+# .golangci.yml
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+      # CLI commands intentionally ignore fmt.Fprint*/Close errors
+      - path: internal/cmd/
+        linters:
+          - errcheck
+      # API client defer Close() is standard pattern
+      - path: internal/api/
+        linters:
+          - errcheck
+      # Output helpers intentionally ignore write errors
+      - path: internal/output/
+        linters:
+          - errcheck
