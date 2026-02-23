@@ -79,6 +79,7 @@ brews:
       system "#{bin}/brandfetch", "--help"
 
 release:
+  mode: replace
   github:
     owner: salmonumbrella
     name: brandfetch-cli
